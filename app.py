@@ -2,7 +2,6 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 
-from core.assets import asset_type_label
 from core.explain import (
     explain_fundamental,
     explain_recommendation,
@@ -10,14 +9,31 @@ from core.explain import (
     explain_technical,
 )
 from core.graph import build_graph, initial_state
-from core.labels import DISCLAIMER, format_number, price_source_label, scenario_label, signal_label
+from core.labels import DISCLAIMER, price_source_label, scenario_label
 from core.prices import history_to_frame
+from core.tables import (
+    fundamental_table,
+    headlines_table,
+    indicators_table,
+    pressure_table,
+    scenarios_table,
+    sentiment_table,
+    summary_table,
+    weights_table,
+)
 
 st.set_page_config(page_title="FinSight Multi-Agent", layout="wide")
 
 st.title("FinSight — Analizador Multi-Agente")
 st.caption("Acciones · ETFs · Criptomonedas · Futuros")
 st.caption(DISCLAIMER)
+
+
+def _show_table(frame: pd.DataFrame) -> None:
+    if frame is None or frame.empty:
+        st.caption("Sin datos para esta tabla.")
+        return
+    st.dataframe(frame, hide_index=True, width="stretch")
 
 
 @st.cache_resource
@@ -39,65 +55,25 @@ if st.button("Analizar", type="primary") and ticker:
     fund = result.get("fundamental") or {}
     sent = result.get("sentiment") or {}
     raw = result.get("raw_data") or {}
-    bp = tech.get("buying_pressure") or {}
-    indicators = tech.get("indicators") or {}
 
     source = price_source_label(
         raw.get("price_source"),
         raw.get("ccxt_symbol") or "",
         raw.get("ccxt_exchange") or "",
     )
-    st.markdown(
-        f"**Tipo de activo:** {asset_type_label(result.get('asset_type'))} · "
-        f"**Fuente de precios:** {source}"
-    )
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Señal final", signal_label(rec.get("signal")))
-    col2.metric("Confianza", f"{rec.get('confidence', 0):.0%}")
-    col3.metric("Señal técnica", signal_label(tech.get("signal")))
-    col4.metric("Proyección", tech.get("projection") or "—")
+    st.subheader("Resumen")
+    _show_table(summary_table(result, source))
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("RSI (14)", format_number(indicators.get("rsi_14"), 2))
-    c2.metric("MACD", format_number(indicators.get("macd"), 4))
-    c3.metric("SMA 50", format_number(indicators.get("sma_50"), 2))
-    c4.metric("SMA 200", format_number(indicators.get("sma_200"), 2))
-
-    st.subheader("Justificación")
-    st.write(rec.get("reasoning") or "Sin datos suficientes")
-    st.caption(DISCLAIMER)
-
-    if bp:
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Indicadores")
+        _show_table(indicators_table(tech))
+    with right:
+        st.subheader("Escenarios")
+        _show_table(scenarios_table(tech))
         st.subheader("Presión compradora")
-        level = bp.get("level", "—")
-        desc = bp.get("description", "")
-        ratio = bp.get("volume_ratio", 1)
-
-        if "mucho" in level.lower():
-            color = "#d4edda"
-            border = "#28a745"
-        elif "regular" in level.lower() or "manteniéndose" in level.lower():
-            color = "#fff3cd"
-            border = "#ffc107"
-        elif "baja" in level.lower() or "muy baja" in level.lower():
-            color = "#f8d7da"
-            border = "#dc3545"
-        else:
-            color = "#e2e3e5"
-            border = "#6c757d"
-
-        ratio_text = format_number(ratio, 2) if bp.get("volume_ratio") is not None else "—"
-        st.markdown(
-            f"""
-            <div style="background-color:{color}; border-left:5px solid {border}; padding:12px 16px; border-radius:6px; margin-bottom:16px;">
-                <strong style="font-size:1.1em;">{level}</strong><br>
-                <span style="color:#333;">{desc}</span><br>
-                <small>Ratio volumen vs promedio 20d: <b>{ratio_text}x</b></small>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        _show_table(pressure_table(tech))
 
     st.subheader("Gráfico de precio y escenarios")
     frame = history_to_frame(raw.get("history"))
@@ -140,39 +116,33 @@ if st.button("Analizar", type="primary") and ticker:
             legend=dict(orientation="h", yanchor="bottom", y=1.02),
         )
         st.plotly_chart(fig, width="stretch")
-        levels = []
-        if sr.get("support"):
-            levels.append(f"Soporte (línea verde): {format_number(sr.get('support'), 2)}")
-        if sr.get("resistance"):
-            levels.append(f"Resistencia (línea roja): {format_number(sr.get('resistance'), 2)}")
-        level_text = (" " + " · ".join(levels) + ".") if levels else ""
         st.caption(
-            f"Escenario más probable: **{best_name}** ({best_prob}%). "
-            f"Fuente de precios: {source}.{level_text}"
+            f"Línea verde: soporte. Línea roja: resistencia. "
+            f"El camino más probable es {best_name} ({best_prob} %). Fuente: {source}."
         )
     else:
         st.info("No se obtuvieron datos suficientes para graficar escenarios.")
 
-    if tech.get("notes"):
-        st.caption("Notas técnicas: " + " · ".join(tech["notes"]))
+    fund_col, sent_col = st.columns(2)
+    with fund_col:
+        st.subheader("Fundamental")
+        _show_table(fundamental_table(fund))
+    with sent_col:
+        st.subheader("Sentimiento y macro")
+        _show_table(sentiment_table(sent))
 
-    st.subheader("Fundamental")
-    st.write(fund.get("summary") or "Sin análisis fundamental.")
+    news = headlines_table(sent)
+    if not news.empty:
+        st.subheader("Titulares")
+        st.dataframe(
+            news,
+            hide_index=True,
+            width="stretch",
+            column_config={"Enlace": st.column_config.LinkColumn("Enlace", display_text="Abrir")},
+        )
 
-    st.subheader("Sentimiento y macro")
-    st.write(sent.get("summary") or "Sin datos de sentimiento.")
-    news = sent.get("news") or []
-    if news:
-        for item in news[:5]:
-            title = item.get("title") or "Titular"
-            link = item.get("link") or ""
-            publisher = item.get("publisher") or ""
-            if link:
-                st.markdown(f"- [{title}]({link})" + (f" · {publisher}" if publisher else ""))
-            else:
-                st.markdown(f"- {title}" + (f" · {publisher}" if publisher else ""))
-    if sent.get("notes"):
-        st.caption("Notas: " + " · ".join(sent["notes"]))
+    st.subheader("Cómo se armó la señal")
+    _show_table(weights_table(rec))
 
     with st.expander("Detalle técnico completo"):
         for paragraph in explain_technical(tech):
@@ -183,17 +153,6 @@ if st.button("Analizar", type="primary") and ticker:
     with st.expander("Detalle de sentimiento y macro"):
         for paragraph in explain_sentiment(sent):
             st.write(paragraph)
-        if news:
-            st.write("Algunos titulares que tuve en cuenta:")
-            for item in news[:5]:
-                title = item.get("title") or "Titular"
-                link = item.get("link") or ""
-                publisher = item.get("publisher") or ""
-                suffix = f" ({publisher})" if publisher else ""
-                if link:
-                    st.markdown(f"- [{title}]({link}){suffix}")
-                else:
-                    st.write(f"- {title}{suffix}")
     with st.expander("Recomendación final"):
         for paragraph in explain_recommendation(rec, result.get("asset_type")):
             st.write(paragraph)
