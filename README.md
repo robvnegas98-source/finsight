@@ -13,11 +13,16 @@ No hace falta ninguna clave para precios, titulares o el índice de miedo y codi
 
 ## Instalación
 
+En Windows no actives el entorno desde PowerShell: suele fallar con «la ejecución de scripts está deshabilitada» y después `streamlit` no se reconoce. Haz doble clic en `iniciar.bat` (está en la carpeta del proyecto). Ese archivo crea el entorno, instala las librerías y abre el navegador. Hace falta [Python 3.11 o más nuevo](https://www.python.org/downloads/) con la casilla **Add python.exe to PATH** marcada.
+
+En Mac o Linux:
+
 ```bash
 cd finsight
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
+streamlit run app.py
 ```
 
 Copia el ejemplo de variables si quieres activar el resumen opcional:
@@ -49,11 +54,13 @@ cp .env.example .env
 
 ## Ejecutar
 
+En Windows, doble clic en `iniciar.bat`. En Mac o Linux, con el entorno ya activado:
+
 ```bash
 streamlit run app.py
 ```
 
-La interfaz llama a `build_graph()` y recorre los seis nodos. No usa el supervisor lineal antiguo.
+Se abre en el navegador, normalmente en http://localhost:8501. La interfaz llama a `build_graph()` y recorre los seis nodos. No usa el supervisor lineal antiguo.
 
 ## Tests
 
