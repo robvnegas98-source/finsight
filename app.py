@@ -5,6 +5,7 @@ import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import pandas as pd
 
+from agents.ownership import load_ownership
 from agents.daytrade import (
     DAYTRADE_STEPS,
     add_entry_exit_lines,
@@ -90,11 +91,25 @@ st.markdown(
 st.caption(DISCLAIMER)
 
 
-def _show_table(frame: pd.DataFrame) -> None:
+def _paint(value) -> str:
+    text = str(value).lower()
+    if any(word in text for word in ("compra", "alcista", "ganancia", "por encima")):
+        return "background-color: #d1fae5; color: #065f46"
+    if any(word in text for word in ("venta", "bajista", "pérdida", "por debajo")):
+        return "background-color: #fee2e2; color: #991b1b"
+    if any(word in text for word in ("mantienen", "tenedor", "hold", "lateral", "normal")):
+        return "background-color: #e0e7ff; color: #1e3a8a"
+    return ""
+
+
+def _show_table(frame: pd.DataFrame, color_column: str = "") -> None:
     if frame is None or frame.empty:
         st.caption("Sin datos para esta tabla.")
         return
-    st.dataframe(frame, hide_index=True, width="stretch")
+    styled = frame
+    if color_column and color_column in frame.columns:
+        styled = frame.style.map(_paint, subset=[color_column])
+    st.dataframe(styled, hide_index=True, width="stretch")
 
 
 @st.cache_resource
@@ -173,19 +188,39 @@ if st.button("Analizar", type="primary") and ticker:
         if day_plan.get("entry") is not None:
             st.subheader("Entrada y salida de hoy")
             _show_table(entry_exit_table(day_plan))
-        st.subheader("Tendencia del día")
-        _show_table(daytrade_trend_table(day_plan))
-        st.subheader("Plan del día")
-        _show_table(daytrade_levels_table(day_plan))
-    elif swing_levels and swing_levels.get("entry") is not None:
-        st.subheader("Entrada y salida")
-        st.write(swing_levels.get("detail"))
-        _show_table(entry_exit_table(swing_levels))
+        trend_col, plan_col = st.columns(2)
+        with trend_col:
+            st.subheader("Tendencia del día")
+            _show_table(daytrade_trend_table(day_plan), "Lectura")
+        with plan_col:
+            st.subheader("Plan del día")
+            _show_table(daytrade_levels_table(day_plan))
         st.subheader("Cómo se hace un day trade")
         for step in DAYTRADE_STEPS:
             st.write(f"- {step}")
         for note in day_plan.get("notes") or []:
             st.caption(note)
+    elif swing_levels and swing_levels.get("entry") is not None:
+        st.subheader("Entrada y salida")
+        st.write(swing_levels.get("detail"))
+        _show_table(entry_exit_table(swing_levels))
+
+    ownership = load_ownership(
+        result.get("ticker") or ticker,
+        result.get("asset_type") or "",
+        tech.get("buying_pressure") or {},
+    )
+    own_left, own_right = st.columns(2)
+    with own_left:
+        st.subheader("Compra, venta y quién mantiene")
+        _show_table(ownership["situation"], "Situación")
+    with own_right:
+        st.subheader("Diez mayores tenedores")
+        _show_table(ownership["holders"])
+    if not ownership["trades"].empty:
+        st.subheader("Compras y ventas declaradas, con cantidades")
+        _show_table(ownership["trades"], "Operación")
+    st.caption(ownership["note"])
 
     tv_symbol = tradingview_symbol(result.get("ticker") or ticker, result.get("asset_type") or "")
     tv_interval = "5" if day_plan is not None else "D"
