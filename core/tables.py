@@ -31,6 +31,22 @@ def _reading_rsi(value) -> str:
     return "Zona media"
 
 
+def _trend_reading(trend) -> str:
+    return {
+        "Alcista": "El precio y las medias apuntan hacia arriba",
+        "Bajista": "El precio y las medias apuntan hacia abajo",
+        "Lateral": "No hay una tendencia limpia",
+    }.get(trend or "", "Sin dato suficiente")
+
+
+def _signed_percent(value) -> str:
+    if value is None:
+        return "—"
+    number = float(value)
+    sign = "+" if number > 0 else ""
+    return f"{sign}{format_number(number, 2)} %"
+
+
 def _reading_macd(macd, signal) -> str:
     if macd is None or signal is None:
         return "Sin dato"
@@ -71,8 +87,11 @@ def indicators_table(tech: Optional[Dict[str, Any]]) -> pd.DataFrame:
         ["RSI (14)", format_number(indicators.get("rsi_14"), 2), _reading_rsi(indicators.get("rsi_14"))],
         ["MACD", format_number(macd, 4), _reading_macd(macd, macd_signal)],
         ["Señal MACD", format_number(macd_signal, 4), "Línea de referencia del MACD"],
+        ["Tendencia", indicators.get("trend") or "Sin dato", _trend_reading(indicators.get("trend"))],
+        ["Distancia a la SMA 50", _signed_percent(indicators.get("distance_sma50_pct")), "Positivo: el precio va por encima de la media"],
+        ["SMA 20", format_number(indicators.get("sma_20"), 2), "Media corta de 20 días"],
         ["SMA 50", format_number(indicators.get("sma_50"), 2), "Media de 50 días"],
-        ["SMA 200", format_number(indicators.get("sma_200"), 2), "Media de 200 días"],
+        ["SMA 200", format_number(indicators.get("sma_200"), 2), "Media larga de 200 días"],
         ["Soporte", format_number(levels.get("support"), 2), "Suelo reciente"],
         ["Resistencia", format_number(levels.get("resistance"), 2), "Techo reciente"],
     ]

@@ -249,6 +249,22 @@ def _load_price_frame(raw_data: Dict[str, Any]) -> Optional[pd.DataFrame]:
     return history_to_frame(yf_history)
 
 
+def _trend_label(price, sma50, sma200) -> str:
+    if price is None:
+        return "Sin dato"
+    if sma50 is not None and sma200 is not None:
+        if price > sma50 > sma200:
+            return "Alcista"
+        if price < sma50 < sma200:
+            return "Bajista"
+        return "Lateral"
+    if sma50 is not None and price > sma50:
+        return "Alcista"
+    if sma50 is not None and price < sma50:
+        return "Bajista"
+    return "Lateral"
+
+
 def analyze_technical(raw_data: Dict[str, Any]) -> Dict[str, Any]:
     result = {
         "signal": "NEUTRAL",
@@ -289,6 +305,9 @@ def analyze_technical(raw_data: Dict[str, Any]) -> Dict[str, Any]:
         last_sma200 = _last_number(sma_200)
 
         # 0.0 es un RSI válido (sobreventa extrema); no tratarlo como vacío.
+        distance = None
+        if last_close not in (None, 0) and last_sma50 not in (None, 0):
+            distance = round((last_close / last_sma50 - 1) * 100, 2)
         result["indicators"] = {
             "price": round(last_close, 2) if last_close is not None else None,
             "rsi_14": round(last_rsi, 2) if last_rsi is not None else None,
@@ -297,6 +316,8 @@ def analyze_technical(raw_data: Dict[str, Any]) -> Dict[str, Any]:
             "sma_20": round(last_sma20, 2) if last_sma20 is not None else None,
             "sma_50": round(last_sma50, 2) if last_sma50 is not None else None,
             "sma_200": round(last_sma200, 2) if last_sma200 is not None else None,
+            "trend": _trend_label(last_close, last_sma50, last_sma200),
+            "distance_sma50_pct": distance,
         }
 
         recent = close.tail(60)

@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import yfinance as yf
 
+from agents.technical import calculate_macd, calculate_rsi
 from core.assets import normalize_crypto_symbol
 from core.prices import ohlcv_to_frame
 
@@ -88,6 +89,10 @@ def analyze_session(frame: Optional[pd.DataFrame]) -> Dict[str, Any]:
     pdh = float(prior["High"].max()) if prior is not None and not prior.empty else None
     pdl = float(prior["Low"].min()) if prior is not None and not prior.empty else None
 
+    rsi = _last_indicator(calculate_rsi(data["Close"], 14))
+    macd_line, macd_signal, _ = calculate_macd(data["Close"])
+    macd_value = _last_indicator(macd_line)
+    macd_signal_value = _last_indicator(macd_signal)
     plan = _decide(last, vwap, or_high, or_low, or_ready, ema9, ema21, atr)
     plan.update({
         "session": str(today),
@@ -99,8 +104,43 @@ def analyze_session(frame: Optional[pd.DataFrame]) -> Dict[str, Any]:
         "previous_low": _round_price(pdl),
         "ema9": _round_price(ema9),
         "ema21": _round_price(ema21),
+        "atr": _round_price(atr),
+        "rsi_14": None if rsi is None else round(rsi, 2),
+        "macd": None if macd_value is None else round(macd_value, 4),
+        "macd_signal": None if macd_signal_value is None else round(macd_signal_value, 4),
+        "trend": _intraday_trend(last, ema9, ema21),
+        "vwap_side": _vwap_side(last, vwap),
     })
     return plan
+
+
+def _last_indicator(series: pd.Series) -> Optional[float]:
+    if series is None or len(series) == 0:
+        return None
+    value = series.iloc[-1]
+    if pd.isna(value):
+        return None
+    return float(value)
+
+
+def _intraday_trend(price: float, ema9: Optional[float], ema21: Optional[float]) -> str:
+    if ema9 is None or ema21 is None:
+        return "Sin dato"
+    if ema9 > ema21 and price > ema21:
+        return "Alcista"
+    if ema9 < ema21 and price < ema21:
+        return "Bajista"
+    return "Lateral"
+
+
+def _vwap_side(price: float, vwap: Optional[float]) -> str:
+    if vwap is None:
+        return "Sin dato"
+    if price > vwap:
+        return "Por encima"
+    if price < vwap:
+        return "Por debajo"
+    return "En el VWAP"
 
 
 def _session_vwap(session: pd.DataFrame) -> Optional[float]:
@@ -246,6 +286,51 @@ def _round_price(value) -> Optional[float]:
         return None
     digits = 2 if abs(number) >= 1 else 4
     return round(number, digits)
+
+
+def daytrade_trend_table(plan: Dict[str, Any]) -> pd.DataFrame:
+    plan = plan or {}
+    macd = plan.get("macd")
+    macd_signal = plan.get("macd_signal")
+    if macd is None or macd_signal is None:
+        macd_reading = "Sin dato"
+    elif macd > macd_signal:
+        macd_reading = "Por encima de su señal"
+    elif macd < macd_signal:
+        macd_reading = "Por debajo de su señal"
+    else:
+        macd_reading = "Junto a su señal"
+    rsi = plan.get("rsi_14")
+    if rsi is None:
+        rsi_reading = "Sin dato"
+    elif rsi < 30:
+        rsi_reading = "Sobreventa en el día"
+    elif rsi > 70:
+        rsi_reading = "Sobrecompra en el día"
+    else:
+        rsi_reading = "Zona media"
+    trend = plan.get("trend") or "Sin dato"
+    trend_reading = {
+        "Alcista": "La media de 9 va por encima de la de 21 y el precio las acompaña",
+        "Bajista": "La media de 9 va por debajo de la de 21 y el precio las acompaña",
+        "Lateral": "Las medias cortas no van en el mismo sentido",
+    }.get(trend, "Sin dato")
+    side = plan.get("vwap_side") or "Sin dato"
+    side_reading = {
+        "Por encima": "El día está del lado comprador",
+        "Por debajo": "El día está del lado vendedor",
+        "En el VWAP": "El precio está pegado al promedio del día",
+    }.get(side, "Sin dato")
+    rows = [
+        ["Tendencia corta", trend, trend_reading],
+        ["Precio contra el VWAP", side, side_reading],
+        ["RSI 14 de 5 minutos", "—" if rsi is None else rsi, rsi_reading],
+        ["MACD de 5 minutos", "—" if macd is None else macd, macd_reading],
+        ["ATR 14", "—" if plan.get("atr") is None else plan.get("atr"), "Cuánto se mueve una vela típica"],
+        ["Media de 9", "—" if plan.get("ema9") is None else plan.get("ema9"), "Media rápida"],
+        ["Media de 21", "—" if plan.get("ema21") is None else plan.get("ema21"), "Media lenta del día"],
+    ]
+    return pd.DataFrame(rows, columns=["Indicador", "Valor", "Lectura"])
 
 
 def daytrade_levels_table(plan: Dict[str, Any]) -> pd.DataFrame:

@@ -5,7 +5,13 @@ import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import pandas as pd
 
-from agents.daytrade import DAYTRADE_STEPS, analyze_session, daytrade_levels_table, fetch_intraday
+from agents.daytrade import (
+    DAYTRADE_STEPS,
+    analyze_session,
+    daytrade_levels_table,
+    daytrade_trend_table,
+    fetch_intraday,
+)
 from core.explain import (
     entry_advice,
     explain_fundamental,
@@ -144,6 +150,8 @@ if st.button("Analizar", type="primary") and ticker:
     )
 
     if day_plan is not None:
+        st.subheader("Tendencia del día")
+        _show_table(daytrade_trend_table(day_plan))
         st.subheader("Plan del día")
         _show_table(daytrade_levels_table(day_plan))
         st.subheader("Cómo se hace un day trade")
@@ -178,7 +186,7 @@ if st.button("Analizar", type="primary") and ticker:
 
         left, right = st.columns(2)
         with left:
-            st.subheader("Indicadores")
+            st.subheader("Tendencia e indicadores")
             _show_table(indicators_table(tech))
         with right:
             st.subheader("Escenarios")

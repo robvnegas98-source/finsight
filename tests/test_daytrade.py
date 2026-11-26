@@ -30,6 +30,10 @@ def test_breakout_above_vwap_is_a_day_buy():
     climb = [100.0] * 6 + [101, 102, 103, 104, 105, 106, 107, 108]
     plan = analyze_session(_session(climb))
     assert plan["action"] == "compra"
+    assert plan["trend"] == "Alcista"
+    assert plan["vwap_side"] == "Por encima"
+    assert plan["rsi_14"] is not None
+    assert plan["macd"] is not None
     assert plan["stop"] < plan["entry"] < plan["target"]
     risk = plan["entry"] - plan["stop"]
     reward = plan["target"] - plan["entry"]
