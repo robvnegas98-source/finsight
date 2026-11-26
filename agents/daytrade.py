@@ -3,6 +3,7 @@
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
+import plotly.graph_objects as go
 import yfinance as yf
 
 from agents.technical import calculate_macd, calculate_rsi
@@ -242,15 +243,77 @@ def _plan(action, title, detail, entry, stop, target, risk) -> Dict[str, Any]:
         "venta": "Entrar en venta hoy",
         "esperar": "No operar hoy",
     }
+    entry_r = _round_price(entry)
+    stop_r = _round_price(stop)
+    target_r = _round_price(target)
+    prices = _entry_exit_sentence(action, entry_r, stop_r, target_r)
+    text = f"{prices} {detail}".strip() if prices else detail
     return {
         "action": action,
         "title": title,
-        "detail": detail + " No es una orden ni un consejo de inversión personal.",
+        "detail": text + " No es una orden ni un consejo de inversión personal.",
         "label": labels[action],
-        "entry": _round_price(entry),
-        "stop": _round_price(stop),
-        "target": _round_price(target),
+        "entry": entry_r,
+        "stop": stop_r,
+        "target": target_r,
         "risk": _round_price(risk),
+    }
+
+
+def _entry_exit_sentence(action, entry, stop, target) -> str:
+    if action == "esperar" or entry is None or stop is None or target is None:
+        return ""
+    if action == "compra":
+        return (
+            f"Entrada: compras cerca de {entry}. "
+            f"Salida con ganancia: vendes si llega a {target}. "
+            f"Salida con pérdida: vendes si cae a {stop}."
+        )
+    return (
+        f"Entrada: vendes cerca de {entry}. "
+        f"Salida con ganancia: recompras si baja a {target}. "
+        f"Salida con pérdida: cierras si sube a {stop}."
+    )
+
+
+def swing_entry_exit(tech: Optional[Dict[str, Any]], signal: str) -> Dict[str, Any]:
+    """Entrada y salida para el análisis de varias semanas, usando precio, soporte y resistencia."""
+    tech = tech or {}
+    indicators = tech.get("indicators") or {}
+    levels = tech.get("support_resistance") or {}
+    price = indicators.get("price")
+    support = levels.get("support")
+    resistance = levels.get("resistance")
+    base_path = (tech.get("scenarios") or {}).get("base") or []
+    base = base_path[-1] if base_path else None
+    if price is None or signal not in {"BUY", "SELL"}:
+        return {
+            "action": "esperar",
+            "entry": None,
+            "stop": None,
+            "target": None,
+            "detail": "No marco entrada ni salida: la señal de varias semanas no es ni compra ni venta.",
+        }
+    price = float(price)
+    if signal == "BUY":
+        stop = float(support) if support is not None and float(support) < price else round(price * 0.97, 2)
+        target = float(resistance) if resistance is not None and float(resistance) > price else None
+        if target is None or target <= price:
+            target = float(base) if base is not None and float(base) > price else price + 2 * (price - stop)
+        action = "compra"
+    else:
+        stop = float(resistance) if resistance is not None and float(resistance) > price else round(price * 1.03, 2)
+        target = float(support) if support is not None and float(support) < price else None
+        if target is None or target >= price:
+            target = float(base) if base is not None and float(base) < price else price - 2 * (stop - price)
+        action = "venta"
+    entry_r, stop_r, target_r = _round_price(price), _round_price(stop), _round_price(target)
+    return {
+        "action": action,
+        "entry": entry_r,
+        "stop": stop_r,
+        "target": target_r,
+        "detail": _entry_exit_sentence(action, entry_r, stop_r, target_r),
     }
 
 
@@ -286,6 +349,75 @@ def _round_price(value) -> Optional[float]:
         return None
     digits = 2 if abs(number) >= 1 else 4
     return round(number, digits)
+
+
+def entry_exit_table(levels: Optional[Dict[str, Any]]) -> pd.DataFrame:
+    levels = levels or {}
+    if levels.get("entry") is None:
+        return pd.DataFrame(columns=["Paso", "Precio"])
+    return pd.DataFrame([
+        ["Entrada", levels.get("entry")],
+        ["Salida con ganancia", levels.get("target")],
+        ["Salida con pérdida", levels.get("stop")],
+    ], columns=["Paso", "Precio"])
+
+
+def add_entry_exit_lines(fig: go.Figure, levels: Optional[Dict[str, Any]]) -> go.Figure:
+    levels = levels or {}
+    if levels.get("entry") is None:
+        return fig
+    for key, color, name, position in (
+        ("entry", "#2563eb", "Entrada", "right"),
+        ("target", "#047857", "Salida con ganancia", "top right"),
+        ("stop", "#b91c1c", "Salida con pérdida", "bottom right"),
+    ):
+        value = levels.get(key)
+        if value is None:
+            continue
+        fig.add_hline(
+            y=float(value),
+            line_color=color,
+            line_width=2,
+            annotation_text=f"{name} {value}",
+            annotation_position=position,
+        )
+    return fig
+
+
+def intraday_entry_chart(frame: Optional[pd.DataFrame], plan: Dict[str, Any]) -> Optional[go.Figure]:
+    """Precio de la sesión con la entrada y las dos salidas dibujadas."""
+    if frame is None or frame.empty or plan.get("entry") is None or "Close" not in frame.columns:
+        return None
+    data = frame.copy()
+    if not isinstance(data.index, pd.DatetimeIndex):
+        data.index = pd.to_datetime(data.index, errors="coerce")
+    data = data.dropna(subset=["Close"]).sort_index()
+    if data.empty:
+        return None
+    today = data.index.date[-1]
+    session = data[pd.Series(data.index.date, index=data.index) == today]
+    if session.empty:
+        session = data.tail(80)
+    figure = go.Figure()
+    figure.add_trace(go.Scatter(
+        x=session.index,
+        y=session["Close"],
+        mode="lines",
+        name="Precio de hoy",
+        line=dict(color="#0f2744", width=2),
+    ))
+    add_entry_exit_lines(figure, plan)
+    figure.update_layout(
+        height=460,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="#ffffff",
+        font=dict(color="#1e293b"),
+        margin=dict(l=0, r=0, t=30, b=0),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+    )
+    figure.update_xaxes(gridcolor="#e2e8f0")
+    figure.update_yaxes(gridcolor="#e2e8f0")
+    return figure
 
 
 def daytrade_trend_table(plan: Dict[str, Any]) -> pd.DataFrame:

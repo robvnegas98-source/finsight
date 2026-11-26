@@ -7,10 +7,14 @@ import pandas as pd
 
 from agents.daytrade import (
     DAYTRADE_STEPS,
+    add_entry_exit_lines,
     analyze_session,
     daytrade_levels_table,
     daytrade_trend_table,
+    entry_exit_table,
     fetch_intraday,
+    intraday_entry_chart,
+    swing_entry_exit,
 )
 from core.explain import (
     entry_advice,
@@ -125,11 +129,13 @@ if st.button("Analizar", type="primary") and ticker:
     )
 
     day_plan = None
+    intraday = None
     if modo == "Day trading":
         intraday, intraday_notes = fetch_intraday(result.get("ticker") or ticker, result.get("asset_type") or "")
         day_plan = analyze_session(intraday)
         if intraday_notes:
             day_plan["notes"] = intraday_notes
+    swing_levels = None if day_plan is not None else swing_entry_exit(tech, rec.get("signal"))
 
     advice = day_plan if day_plan is not None else entry_advice(rec)
     advice_styles = {
@@ -150,10 +156,21 @@ if st.button("Analizar", type="primary") and ticker:
     )
 
     if day_plan is not None:
+        if day_plan.get("entry") is not None:
+            st.subheader("Entrada y salida de hoy")
+            _show_table(entry_exit_table(day_plan))
+            session_chart = intraday_entry_chart(intraday, day_plan)
+            if session_chart is not None:
+                st.plotly_chart(session_chart, width="stretch")
+                st.caption("Línea azul: entras. Línea verde: sales con ganancia. Línea roja: sales si la operación sale mal.")
         st.subheader("Tendencia del día")
         _show_table(daytrade_trend_table(day_plan))
         st.subheader("Plan del día")
         _show_table(daytrade_levels_table(day_plan))
+    elif swing_levels and swing_levels.get("entry") is not None:
+        st.subheader("Entrada y salida")
+        st.write(swing_levels.get("detail"))
+        _show_table(entry_exit_table(swing_levels))
         st.subheader("Cómo se hace un day trade")
         for step in DAYTRADE_STEPS:
             st.write(f"- {step}")
@@ -228,6 +245,8 @@ if st.button("Analizar", type="primary") and ticker:
                 fig.add_hline(y=sr["support"], line_dash="dot", line_color="green")
             if sr.get("resistance"):
                 fig.add_hline(y=sr["resistance"], line_dash="dot", line_color="red")
+            if swing_levels and swing_levels.get("entry") is not None:
+                add_entry_exit_lines(fig, swing_levels)
 
             fig.update_layout(
                 height=520,

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from agents.daytrade import analyze_session
+from agents.daytrade import analyze_session, swing_entry_exit
 
 
 def _session(second_day):
@@ -30,6 +30,9 @@ def test_breakout_above_vwap_is_a_day_buy():
     climb = [100.0] * 6 + [101, 102, 103, 104, 105, 106, 107, 108]
     plan = analyze_session(_session(climb))
     assert plan["action"] == "compra"
+    assert "Entrada:" in plan["detail"]
+    assert "Salida con ganancia" in plan["detail"]
+    assert "Salida con pérdida" in plan["detail"]
     assert plan["trend"] == "Alcista"
     assert plan["vwap_side"] == "Por encima"
     assert plan["rsi_14"] is not None
@@ -46,6 +49,20 @@ def test_breakdown_below_vwap_is_a_day_sell():
     plan = analyze_session(_session(drop))
     assert plan["action"] == "venta"
     assert plan["target"] < plan["entry"] < plan["stop"]
+
+
+def test_swing_buy_marks_entry_stop_and_target():
+    levels = swing_entry_exit(
+        {
+            "indicators": {"price": 100},
+            "support_resistance": {"support": 95, "resistance": 110},
+        },
+        "BUY",
+    )
+    assert levels["entry"] == 100
+    assert levels["stop"] == 95
+    assert levels["target"] == 110
+    assert "compras cerca de 100" in levels["detail"]
 
 
 def test_short_session_waits_for_the_opening_range():
