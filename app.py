@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import pandas as pd
 
@@ -9,8 +10,9 @@ from core.explain import (
     explain_technical,
 )
 from core.graph import build_graph, initial_state
-from core.labels import DISCLAIMER, price_source_label, scenario_label
+from core.labels import DISCLAIMER, price_source_label, scenario_label, signal_label
 from core.prices import history_to_frame
+from core.tradingview import tradingview_symbol, tradingview_widget_html
 from core.tables import (
     fundamental_table,
     headlines_table,
@@ -24,8 +26,53 @@ from core.tables import (
 
 st.set_page_config(page_title="FinSight Multi-Agent", layout="wide")
 
-st.title("FinSight — Analizador Multi-Agente")
-st.caption("Acciones · ETFs · Criptomonedas · Futuros")
+st.markdown(
+    """
+    <style>
+    .stApp {
+      background:
+        radial-gradient(900px 280px at 0% -10%, rgba(15, 118, 110, 0.16), transparent 60%),
+        radial-gradient(700px 240px at 100% 0%, rgba(180, 83, 9, 0.12), transparent 55%),
+        linear-gradient(180deg, #e7eef8 0%, #f7f4ef 240px, #f5f7fb 100%);
+    }
+    h1, h2, h3 { color: #0f2744; letter-spacing: -0.02em; }
+    div[data-testid="stCaption"] { color: #3d4c63; }
+    div[data-testid="stDataFrame"] {
+      border: 1px solid #dbe3ef;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #ffffff;
+    }
+    .fs-banner {
+      background: linear-gradient(120deg, #0f2744 0%, #0f766e 62%, #b45309 140%);
+      color: #f8fafc;
+      border-radius: 16px;
+      padding: 22px 26px 18px;
+      margin-bottom: 12px;
+      box-shadow: 0 10px 30px rgba(15, 39, 68, 0.16);
+    }
+    .fs-banner h1 { color: #ffffff; margin: 0 0 4px; font-size: 2rem; }
+    .fs-banner p { margin: 0; color: #dbe7f5; }
+    .fs-signal {
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin: 8px 0 16px;
+      font-weight: 650;
+      border: 1px solid transparent;
+    }
+    div.stButton > button[kind="primary"] {
+      background: #0f766e;
+      border: none;
+      border-radius: 10px;
+    }
+    </style>
+    <div class="fs-banner">
+      <h1>FinSight</h1>
+      <p>Analizador multi-agente · Acciones, ETFs, criptomonedas y futuros</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 st.caption(DISCLAIMER)
 
 
@@ -60,6 +107,22 @@ if st.button("Analizar", type="primary") and ticker:
         raw.get("price_source"),
         raw.get("ccxt_symbol") or "",
         raw.get("ccxt_exchange") or "",
+    )
+
+    signal = (rec.get("signal") or "NEUTRAL").upper()
+    signal_styles = {
+        "BUY": ("#ecfdf5", "#047857", "#a7f3d0"),
+        "SELL": ("#fef2f2", "#b91c1c", "#fecaca"),
+        "NEUTRAL": ("#fffbeb", "#b45309", "#fde68a"),
+    }
+    background, ink, border = signal_styles.get(signal, signal_styles["NEUTRAL"])
+    st.markdown(
+        f"""
+        <div class="fs-signal" style="background:{background};color:{ink};border-color:{border};">
+          Señal final: {signal_label(rec.get("signal"))} · Confianza {float(rec.get("confidence") or 0):.0%}
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     st.subheader("Resumen")
@@ -112,9 +175,14 @@ if st.button("Analizar", type="primary") and ticker:
 
         fig.update_layout(
             height=520,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="#ffffff",
+            font=dict(color="#1e293b"),
             margin=dict(l=0, r=0, t=40, b=0),
             legend=dict(orientation="h", yanchor="bottom", y=1.02),
         )
+        fig.update_xaxes(gridcolor="#e2e8f0")
+        fig.update_yaxes(gridcolor="#e2e8f0")
         st.plotly_chart(fig, width="stretch")
         st.caption(
             f"Línea verde: soporte. Línea roja: resistencia. "
@@ -122,6 +190,14 @@ if st.button("Analizar", type="primary") and ticker:
         )
     else:
         st.info("No se obtuvieron datos suficientes para graficar escenarios.")
+
+    tv_symbol = tradingview_symbol(result.get("ticker") or ticker, result.get("asset_type") or "")
+    st.subheader("Gráfico en vivo (TradingView)")
+    st.caption(
+        "Este gráfico es aparte del de escenarios. TradingView actualiza la cotización "
+        "mientras el mercado está abierto. En el acceso gratuito algunos símbolos van con unos minutos de retraso."
+    )
+    components.html(tradingview_widget_html(tv_symbol, height=560), height=570)
 
     fund_col, sent_col = st.columns(2)
     with fund_col:
