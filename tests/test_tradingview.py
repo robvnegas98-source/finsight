@@ -20,5 +20,9 @@ def test_widget_html_contains_the_symbol_and_attribution():
     assert '"locale": "es"' in html
     assert "RSI@tv-basicstudies" in html
     assert "MACD@tv-basicstudies" in html
-    assert "MAExp@tv-basicstudies" in tradingview_widget_html("AAPL", interval="5")
-    assert "MASimple@tv-basicstudies" in tradingview_widget_html("AAPL", interval="D")
+    intraday = tradingview_widget_html("AAPL", interval="5")
+    daily = tradingview_widget_html("AAPL", interval="D")
+    for name in ("VWAP@tv-basicstudies", "MAExp@tv-basicstudies", "RSI@tv-basicstudies", "MACD@tv-basicstudies", "Volume@tv-basicstudies"):
+        assert name in intraday
+    for name in ("MASimple@tv-basicstudies", "RSI@tv-basicstudies", "MACD@tv-basicstudies", "BB@tv-basicstudies", "Volume@tv-basicstudies"):
+        assert name in daily

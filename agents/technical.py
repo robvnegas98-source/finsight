@@ -308,6 +308,18 @@ def analyze_technical(raw_data: Dict[str, Any]) -> Dict[str, Any]:
         distance = None
         if last_close not in (None, 0) and last_sma50 not in (None, 0):
             distance = round((last_close / last_sma50 - 1) * 100, 2)
+        upper_band = sma_20 + 2 * close.rolling(20).std()
+        lower_band = sma_20 - 2 * close.rolling(20).std()
+        last_upper = _last_number(upper_band)
+        last_lower = _last_number(lower_band)
+        bollinger = None
+        if (
+            last_close is not None
+            and last_upper is not None
+            and last_lower is not None
+            and last_upper != last_lower
+        ):
+            bollinger = round((last_close - last_lower) / (last_upper - last_lower), 2)
         result["indicators"] = {
             "price": round(last_close, 2) if last_close is not None else None,
             "rsi_14": round(last_rsi, 2) if last_rsi is not None else None,
@@ -318,6 +330,7 @@ def analyze_technical(raw_data: Dict[str, Any]) -> Dict[str, Any]:
             "sma_200": round(last_sma200, 2) if last_sma200 is not None else None,
             "trend": _trend_label(last_close, last_sma50, last_sma200),
             "distance_sma50_pct": distance,
+            "bollinger": bollinger,
         }
 
         recent = close.tail(60)

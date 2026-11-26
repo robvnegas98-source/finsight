@@ -39,6 +39,38 @@ def _trend_reading(trend) -> str:
     }.get(trend or "", "Sin dato suficiente")
 
 
+def _bollinger_value(value) -> str:
+    if value is None:
+        return "—"
+    return format_number(value, 2)
+
+
+def _bollinger_reading(value) -> str:
+    if value is None:
+        return "Sin dato"
+    if value > 1:
+        return "Por encima de la banda superior: el movimiento va estirado"
+    if value < 0:
+        return "Por debajo de la banda inferior: el movimiento va estirado a la baja"
+    return "Dentro de las bandas"
+
+
+def _volume_value(value) -> str:
+    if value is None:
+        return "—"
+    return f"{format_number(value, 2)}x"
+
+
+def _volume_reading(value) -> str:
+    if value is None:
+        return "Sin dato de volumen"
+    if value >= 1.3:
+        return "Volumen alto: la tendencia tiene respaldo"
+    if value <= 0.7:
+        return "Volumen bajo: la tendencia es débil"
+    return "Volumen normal"
+
+
 def _signed_percent(value) -> str:
     if value is None:
         return "—"
@@ -82,12 +114,14 @@ def indicators_table(tech: Optional[Dict[str, Any]]) -> pd.DataFrame:
     levels = tech.get("support_resistance") or {}
     macd = indicators.get("macd")
     macd_signal = indicators.get("macd_signal")
+    volume_ratio = (tech.get("buying_pressure") or {}).get("volume_ratio")
     rows = [
+        ["1. Medias", indicators.get("trend") or "Sin dato", _trend_reading(indicators.get("trend"))],
+        ["2. RSI (14)", format_number(indicators.get("rsi_14"), 2), _reading_rsi(indicators.get("rsi_14"))],
+        ["3. MACD", format_number(macd, 4), _reading_macd(macd, macd_signal)],
+        ["4. Bandas de Bollinger", _bollinger_value(indicators.get("bollinger")), _bollinger_reading(indicators.get("bollinger"))],
+        ["5. Volumen", _volume_value(volume_ratio), _volume_reading(volume_ratio)],
         ["Precio", format_number(indicators.get("price"), 2), "Último cierre"],
-        ["RSI (14)", format_number(indicators.get("rsi_14"), 2), _reading_rsi(indicators.get("rsi_14"))],
-        ["MACD", format_number(macd, 4), _reading_macd(macd, macd_signal)],
-        ["Señal MACD", format_number(macd_signal, 4), "Línea de referencia del MACD"],
-        ["Tendencia", indicators.get("trend") or "Sin dato", _trend_reading(indicators.get("trend"))],
         ["Distancia a la SMA 50", _signed_percent(indicators.get("distance_sma50_pct")), "Positivo: el precio va por encima de la media"],
         ["SMA 20", format_number(indicators.get("sma_20"), 2), "Media corta de 20 días"],
         ["SMA 50", format_number(indicators.get("sma_50"), 2), "Media de 50 días"],

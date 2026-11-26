@@ -59,9 +59,21 @@ def tradingview_widget_html(symbol: str, height: int = 560, interval: str = "D")
     safe = (symbol or "NASDAQ:AAPL").replace('"', "").replace("<", "").replace(">", "")
     container = "finsight_tv"
     if interval == "D":
-        studies = ["MASimple@tv-basicstudies", "RSI@tv-basicstudies", "MACD@tv-basicstudies"]
+        studies = [
+            "MASimple@tv-basicstudies",
+            "RSI@tv-basicstudies",
+            "MACD@tv-basicstudies",
+            "BB@tv-basicstudies",
+            "Volume@tv-basicstudies",
+        ]
     else:
-        studies = ["MAExp@tv-basicstudies", "RSI@tv-basicstudies", "MACD@tv-basicstudies"]
+        studies = [
+            "VWAP@tv-basicstudies",
+            "MAExp@tv-basicstudies",
+            "RSI@tv-basicstudies",
+            "MACD@tv-basicstudies",
+            "Volume@tv-basicstudies",
+        ]
     studies_json = ", ".join(f'"{name}"' for name in studies)
     return f"""
     <div class="tradingview-widget-container" style="height:{height - 32}px;width:100%">

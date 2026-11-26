@@ -111,8 +111,18 @@ def analyze_session(frame: Optional[pd.DataFrame]) -> Dict[str, Any]:
         "macd_signal": None if macd_signal_value is None else round(macd_signal_value, 4),
         "trend": _intraday_trend(last, ema9, ema21),
         "vwap_side": _vwap_side(last, vwap),
+        "volume_ratio": _volume_pace(session, data),
     })
     return plan
+
+
+def _volume_pace(session: pd.DataFrame, data: pd.DataFrame) -> Optional[float]:
+    """Volumen de las últimas velas contra el promedio. Los foros lo usan para ver si la tendencia tiene respaldo."""
+    baseline = float(data["Volume"].fillna(0).mean()) if len(data) else 0.0
+    recent = session["Volume"].fillna(0).tail(6)
+    if baseline <= 0 or recent.empty:
+        return None
+    return round(float(recent.mean()) / baseline, 2)
 
 
 def _last_indicator(series: pd.Series) -> Optional[float]:
@@ -453,14 +463,21 @@ def daytrade_trend_table(plan: Dict[str, Any]) -> pd.DataFrame:
         "Por debajo": "El día está del lado vendedor",
         "En el VWAP": "El precio está pegado al promedio del día",
     }.get(side, "Sin dato")
+    volume_ratio = plan.get("volume_ratio")
+    if volume_ratio is None:
+        volume_text, volume_reading = "—", "Sin dato de volumen"
+    elif volume_ratio >= 1.3:
+        volume_text, volume_reading = f"{volume_ratio}x", "Volumen alto: la tendencia tiene respaldo"
+    elif volume_ratio <= 0.7:
+        volume_text, volume_reading = f"{volume_ratio}x", "Volumen bajo: la tendencia es débil"
+    else:
+        volume_text, volume_reading = f"{volume_ratio}x", "Volumen normal"
     rows = [
-        ["Tendencia corta", trend, trend_reading],
-        ["Precio contra el VWAP", side, side_reading],
-        ["RSI 14 de 5 minutos", "—" if rsi is None else rsi, rsi_reading],
-        ["MACD de 5 minutos", "—" if macd is None else macd, macd_reading],
-        ["ATR 14", "—" if plan.get("atr") is None else plan.get("atr"), "Cuánto se mueve una vela típica"],
-        ["Media de 9", "—" if plan.get("ema9") is None else plan.get("ema9"), "Media rápida"],
-        ["Media de 21", "—" if plan.get("ema21") is None else plan.get("ema21"), "Media lenta del día"],
+        ["1. VWAP", side, side_reading],
+        ["2. Medias 9 y 21", trend, trend_reading],
+        ["3. RSI", "—" if rsi is None else rsi, rsi_reading],
+        ["4. MACD", "—" if macd is None else macd, macd_reading],
+        ["5. Volumen", volume_text, volume_reading],
     ]
     return pd.DataFrame(rows, columns=["Indicador", "Valor", "Lectura"])
 

@@ -182,14 +182,16 @@ if st.button("Analizar", type="primary") and ticker:
     st.subheader("Gráfico en vivo (TradingView)")
     if day_plan is not None:
         st.caption(
-            "Velas de 5 minutos con los indicadores de TradingView: media exponencial, RSI y MACD. "
+            "Velas de 5 minutos con los cinco indicadores que más se repiten en los foros de day trading: "
+            "VWAP, medias exponenciales, RSI, MACD y volumen. "
             "Esos dibujos viven en el gráfico. Los precios de entrada y salida los calcula el programa, "
             "porque TradingView no deja leer esos números sin una licencia de pago. "
             "En el acceso gratuito algunos símbolos van con retraso."
         )
     else:
         st.caption(
-            "Gráfico diario con los indicadores de TradingView: media simple, RSI y MACD. "
+            "Gráfico diario con los cinco que más se repiten para un plazo de semanas: "
+            "media simple, RSI, MACD, Bandas de Bollinger y volumen. "
             "La entrada y la salida de la tabla las calcula el programa. "
             "En el acceso gratuito algunos símbolos van con retraso."
         )

@@ -36,6 +36,7 @@ def test_breakout_above_vwap_is_a_day_buy():
     assert plan["trend"] == "Alcista"
     assert plan["vwap_side"] == "Por encima"
     assert plan["rsi_14"] is not None
+    assert plan["volume_ratio"] == 1.0
     assert plan["macd"] is not None
     assert plan["stop"] < plan["entry"] < plan["target"]
     risk = plan["entry"] - plan["stop"]
