@@ -49,6 +49,41 @@ ASSET_LABELS = {
 # Tipos sin múltiplos contables tipo PER.
 NON_FUNDAMENTAL_TYPES = {"crypto", "futures", "forex", "index"}
 
+# El oro al contado ya no trae velas en Yahoo. El futuro GC=F sí.
+_GOLD_SPOT = {
+    "XAUUSD=X",
+    "XAUUSD",
+    "XAU=X",
+    "XAU",
+    "XAU/USD",
+    "ORO",
+    "GOLD=X",
+}
+_GOLD_CHAIN = ("GC=F", "GLD", "IAU")
+
+
+def market_ticker(ticker: str) -> str:
+    """Símbolo que sí tiene precios. El oro al contado se lee en el futuro GC=F."""
+    symbol = (ticker or "").strip().upper()
+    if symbol in _GOLD_SPOT:
+        return "GC=F"
+    return symbol
+
+
+def is_gold_ticker(ticker: str) -> bool:
+    symbol = (ticker or "").strip().upper()
+    return symbol in _GOLD_SPOT or symbol in _GOLD_CHAIN
+
+
+def gold_ticker_chain(ticker: str) -> list:
+    """Orden de respaldo si el primer símbolo de oro no trae velas."""
+    first = market_ticker(ticker)
+    chain = []
+    for candidate in (first, *_GOLD_CHAIN):
+        if candidate not in chain:
+            chain.append(candidate)
+    return chain
+
 
 def classify_asset(ticker: str) -> str:
     """Clasifica por el símbolo, sin consultar la red."""

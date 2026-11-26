@@ -1,6 +1,6 @@
 """Símbolo y gráfico embebido de TradingView. No hace falta una clave."""
 
-from core.assets import normalize_crypto_symbol
+from core.assets import is_gold_ticker, market_ticker, normalize_crypto_symbol
 
 _FUTURES = {
     "GC": "COMEX:GC1!",
@@ -37,6 +37,9 @@ def tradingview_symbol(ticker: str, asset_type: str = "") -> str:
     asset_type = asset_type or ""
     if not symbol:
         return "NASDAQ:AAPL"
+    if is_gold_ticker(symbol):
+        root = market_ticker(symbol).replace("=F", "")
+        return _FUTURES.get(root, "COMEX:GC1!")
     if asset_type == "crypto":
         pair = normalize_crypto_symbol(symbol)
         base, _, quote = pair.partition("/")

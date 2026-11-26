@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import yfinance as yf
 
 from agents.technical import calculate_macd, calculate_rsi
-from core.assets import normalize_crypto_symbol
+from core.assets import gold_ticker_chain, is_gold_ticker, market_ticker, normalize_crypto_symbol
 from core.prices import ohlcv_to_frame
 
 OPENING_BARS = 6  # 30 minutos en velas de 5 minutos
@@ -16,10 +16,22 @@ OPENING_BARS = 6  # 30 minutos en velas de 5 minutos
 def fetch_intraday(ticker: str, asset_type: str = "") -> Tuple[Optional[pd.DataFrame], List[str]]:
     """Últimos días en velas de 5 minutos. Yahoo primero; en cripto, CCXT si Yahoo falla."""
     notes: List[str] = []
-    frame = _download_yahoo(ticker, notes)
-    if frame is None and asset_type == "crypto":
-        frame = _download_ccxt(ticker, notes)
-    return frame, notes
+    requested = (ticker or "").strip().upper()
+    candidates = gold_ticker_chain(requested) if is_gold_ticker(requested) else [market_ticker(requested)]
+    for candidate in candidates:
+        frame = _download_yahoo(candidate, notes if candidate == candidates[0] else [])
+        if frame is not None:
+            if candidate != requested:
+                notes.append(
+                    f"{requested} no trae velas de 5 minutos. "
+                    f"Se usa {candidate}, que es el oro con velas disponibles."
+                )
+            return frame, notes
+    if asset_type == "crypto" or not is_gold_ticker(requested):
+        frame = _download_ccxt(requested, notes) if asset_type == "crypto" else None
+        if frame is not None:
+            return frame, notes
+    return None, notes
 
 
 def normalize_intraday(history: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:

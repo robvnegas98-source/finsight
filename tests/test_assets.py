@@ -3,6 +3,8 @@ import pytest
 from core.assets import (
     asset_type_label,
     classify_asset,
+    gold_ticker_chain,
+    market_ticker,
     normalize_crypto_symbol,
     refine_asset_type,
     should_request_fundamentals,
@@ -44,6 +46,15 @@ def test_classify_asset(ticker, expected):
 )
 def test_normalize_crypto_symbol(ticker, expected):
     assert normalize_crypto_symbol(ticker) == expected
+
+
+def test_gold_spot_uses_the_futures_contract():
+    assert market_ticker("XAUUSD=X") == "GC=F"
+    assert market_ticker("oro") == "GC=F"
+    assert market_ticker("GC=F") == "GC=F"
+    assert market_ticker("GOLD") == "GOLD"
+    assert gold_ticker_chain("XAUUSD")[0] == "GC=F"
+    assert "GLD" in gold_ticker_chain("GC=F")
 
 
 def test_refine_and_fundamentals_policy():

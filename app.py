@@ -118,7 +118,7 @@ def get_analysis_graph():
 
 
 ticker = st.text_input(
-    "Ticker (ej: AAPL, SPY, BTC-USD, GLD, GC=F, XAUUSD=X)",
+    "Ticker (ej: AAPL, SPY, BTC-USD, oro: GC=F o XAUUSD)",
     value="AAPL",
 ).upper().strip()
 modo = st.radio(

@@ -10,6 +10,8 @@ import yfinance as yf
 
 from core.assets import (
     classify_asset,
+    is_gold_ticker,
+    market_ticker,
     normalize_crypto_symbol,
     refine_asset_type,
     should_request_fundamentals,
@@ -117,9 +119,14 @@ def _load_ccxt(symbol: str, errors: List[str], sources: Dict[str, Any]):
 
 
 def collect_data(ticker: str) -> Dict[str, Any]:
-    symbol = (ticker or "").strip().upper()
+    requested = (ticker or "").strip().upper()
+    symbol = market_ticker(requested)
     asset_type = classify_asset(symbol)
     errors: List[str] = []
+    if symbol != requested and is_gold_ticker(requested):
+        errors.append(
+            f"{requested} ya no trae precios en Yahoo. Se usa {symbol}, el futuro del oro, que sí tiene velas."
+        )
     sources: Dict[str, Any] = {}
     history_df = None
     price_source = None

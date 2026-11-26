@@ -5,7 +5,7 @@ def test_tradingview_symbols():
     assert tradingview_symbol("BTC-USD", "crypto") == "BINANCE:BTCUSDT"
     assert tradingview_symbol("ETH-USD", "crypto") == "BINANCE:ETHUSDT"
     assert tradingview_symbol("GC=F", "futures") == "COMEX:GC1!"
-    assert tradingview_symbol("XAUUSD=X", "forex") == "OANDA:XAUUSD"
+    assert tradingview_symbol("XAUUSD=X", "forex") == "COMEX:GC1!"
     assert tradingview_symbol("^GSPC", "index") == "SP:SPX"
     assert tradingview_symbol("SPY", "etf") == "AMEX:SPY"
     assert tradingview_symbol("BRK-B", "stock") == "BRK.B"
