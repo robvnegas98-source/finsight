@@ -22,32 +22,74 @@ def fetch_intraday(ticker: str, asset_type: str = "") -> Tuple[Optional[pd.DataF
     return frame, notes
 
 
+def normalize_intraday(history: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
+    """Acepta el formato de Yahoo, incluso si las columnas vienen en dos niveles."""
+    if history is None or len(history) == 0:
+        return None
+    frame = history.copy()
+    if isinstance(frame.columns, pd.MultiIndex):
+        frame.columns = frame.columns.get_level_values(0)
+    renamed = {}
+    for column in frame.columns:
+        key = str(column).lower().replace(" ", "")
+        if key in {"open", "high", "low", "close", "volume"}:
+            renamed[column] = "Volume" if key == "volume" else key.capitalize()
+    frame = frame.rename(columns=renamed)
+    if "Close" not in frame.columns:
+        return None
+    keep = [column for column in ("Open", "High", "Low", "Close", "Volume") if column in frame.columns]
+    frame = frame[keep].dropna(subset=["Close"])
+    if frame.empty:
+        return None
+    if not isinstance(frame.index, pd.DatetimeIndex):
+        frame.index = pd.to_datetime(frame.index, errors="coerce")
+        frame = frame[~frame.index.isna()]
+    return frame.sort_index()
+
+
 def _download_yahoo(ticker: str, notes: List[str]) -> Optional[pd.DataFrame]:
-    try:
-        history = yf.Ticker(ticker).history(period="5d", interval="5m", auto_adjust=True)
-    except Exception as exc:
-        notes.append(f"No se pudieron bajar velas de 5 minutos ({type(exc).__name__}).")
-        return None
-    if history is None or history.empty or "Close" not in history.columns:
-        notes.append("Yahoo no devolvió velas de 5 minutos.")
-        return None
-    return history
+    attempts = (
+        ("historial", lambda: yf.Ticker(ticker).history(period="5d", interval="5m", auto_adjust=False)),
+        ("descarga", lambda: yf.download(ticker, period="5d", interval="5m", auto_adjust=False, progress=False, threads=False)),
+        ("un día", lambda: yf.Ticker(ticker).history(period="1d", interval="5m", auto_adjust=False)),
+    )
+    for name, load in attempts:
+        try:
+            frame = normalize_intraday(load())
+        except Exception as exc:
+            notes.append(f"Yahoo ({name}) no dio velas de 5 minutos ({type(exc).__name__}).")
+            continue
+        if frame is not None:
+            return frame
+    notes.append("Yahoo no devolvió velas de 5 minutos.")
+    return None
 
 
 def _download_ccxt(ticker: str, notes: List[str]) -> Optional[pd.DataFrame]:
     try:
         import ccxt
-
-        symbol = normalize_crypto_symbol(ticker)
-        exchange = ccxt.binance({"enableRateLimit": True, "timeout": 12000})
-        candles = exchange.fetch_ohlcv(symbol, timeframe="5m", limit=500)
     except Exception as exc:
-        notes.append(f"Tampoco hubo velas de 5 minutos en CCXT ({type(exc).__name__}).")
+        notes.append(f"CCXT no está disponible ({type(exc).__name__}).")
         return None
-    if not candles:
-        notes.append("CCXT no devolvió velas de 5 minutos.")
-        return None
-    return ohlcv_to_frame(candles)
+    symbol = normalize_crypto_symbol(ticker)
+    base = symbol.split("/")[0] if "/" in symbol else symbol
+    attempts = (
+        ("binance", f"{base}/USDT"),
+        ("kraken", f"{base}/USD"),
+        ("coinbase", f"{base}/USD"),
+    )
+    for exchange_id, pair in attempts:
+        try:
+            exchange = getattr(ccxt, exchange_id)({"enableRateLimit": True, "timeout": 12000})
+            candles = exchange.fetch_ohlcv(pair, timeframe="5m", limit=500)
+        except Exception as exc:
+            notes.append(f"{exchange_id} no dio velas de 5 minutos ({type(exc).__name__}).")
+            continue
+        frame = ohlcv_to_frame(candles) if candles else None
+        if frame is not None and not frame.empty:
+            return frame
+    notes.append("Ningún exchange devolvió velas de 5 minutos.")
+    return None
 
 
 def analyze_session(frame: Optional[pd.DataFrame]) -> Dict[str, Any]:
@@ -394,36 +436,37 @@ def add_entry_exit_lines(fig: go.Figure, levels: Optional[Dict[str, Any]]) -> go
     return fig
 
 
-def intraday_entry_chart(frame: Optional[pd.DataFrame], plan: Dict[str, Any]) -> Optional[go.Figure]:
-    """Precio de la sesión con la entrada y las dos salidas dibujadas."""
-    if frame is None or frame.empty or plan.get("entry") is None or "Close" not in frame.columns:
+def intraday_entry_chart(frame: Optional[pd.DataFrame], plan: Optional[Dict[str, Any]] = None) -> Optional[go.Figure]:
+    """Velas de 5 minutos. Si hay operación, marca la entrada y las dos salidas."""
+    data = normalize_intraday(frame)
+    if data is None or data.empty:
         return None
-    data = frame.copy()
-    if not isinstance(data.index, pd.DatetimeIndex):
-        data.index = pd.to_datetime(data.index, errors="coerce")
-    data = data.dropna(subset=["Close"]).sort_index()
-    if data.empty:
-        return None
-    today = data.index.date[-1]
-    session = data[pd.Series(data.index.date, index=data.index) == today]
-    if session.empty:
-        session = data.tail(80)
+    for column in ("Open", "High", "Low"):
+        if column not in data.columns:
+            data[column] = data["Close"]
+    dates = list(dict.fromkeys(data.index.date))
+    visible = data[pd.Series(data.index.date, index=data.index).isin(dates[-2:])]
     figure = go.Figure()
-    figure.add_trace(go.Scatter(
-        x=session.index,
-        y=session["Close"],
-        mode="lines",
-        name="Precio de hoy",
-        line=dict(color="#0f2744", width=2),
+    figure.add_trace(go.Candlestick(
+        x=visible.index,
+        open=visible["Open"],
+        high=visible["High"],
+        low=visible["Low"],
+        close=visible["Close"],
+        name="Velas de 5 minutos",
+        increasing_line_color="#047857",
+        decreasing_line_color="#b91c1c",
     ))
-    add_entry_exit_lines(figure, plan)
+    if plan and plan.get("entry") is not None:
+        add_entry_exit_lines(figure, plan)
     figure.update_layout(
-        height=460,
+        height=520,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#ffffff",
         font=dict(color="#1e293b"),
         margin=dict(l=0, r=0, t=30, b=0),
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        xaxis_rangeslider_visible=False,
     )
     figure.update_xaxes(gridcolor="#e2e8f0")
     figure.update_yaxes(gridcolor="#e2e8f0")

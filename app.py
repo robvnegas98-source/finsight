@@ -135,6 +135,11 @@ if st.button("Analizar", type="primary") and ticker:
         day_plan = analyze_session(intraday)
         if intraday_notes:
             day_plan["notes"] = intraday_notes
+            if intraday is None:
+                day_plan["detail"] = (
+                    "TradingView puede mostrar velas, pero la fuente de precios del programa no las entregó. "
+                    + " ".join(intraday_notes)
+                )
     swing_levels = None if day_plan is not None else swing_entry_exit(tech, rec.get("signal"))
 
     advice = day_plan if day_plan is not None else entry_advice(rec)
@@ -156,13 +161,18 @@ if st.button("Analizar", type="primary") and ticker:
     )
 
     if day_plan is not None:
+        candle_chart = intraday_entry_chart(intraday, day_plan)
+        if candle_chart is not None:
+            st.subheader("Velas de 5 minutos")
+            st.plotly_chart(candle_chart, width="stretch")
+            st.caption(
+                "Cada vela son 5 minutos. Verde: el precio cerró arriba. Rojo: cerró abajo. "
+                "Si hay operación, la línea azul es la entrada, la verde la salida con ganancia "
+                "y la roja la salida con pérdida."
+            )
         if day_plan.get("entry") is not None:
             st.subheader("Entrada y salida de hoy")
             _show_table(entry_exit_table(day_plan))
-            session_chart = intraday_entry_chart(intraday, day_plan)
-            if session_chart is not None:
-                st.plotly_chart(session_chart, width="stretch")
-                st.caption("Línea azul: entras. Línea verde: sales con ganancia. Línea roja: sales si la operación sale mal.")
         st.subheader("Tendencia del día")
         _show_table(daytrade_trend_table(day_plan))
         st.subheader("Plan del día")

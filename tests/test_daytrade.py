@@ -1,6 +1,6 @@
 import pandas as pd
 
-from agents.daytrade import analyze_session, swing_entry_exit
+from agents.daytrade import analyze_session, normalize_intraday, swing_entry_exit
 
 
 def _session(second_day):
@@ -64,6 +64,23 @@ def test_swing_buy_marks_entry_stop_and_target():
     assert levels["stop"] == 95
     assert levels["target"] == 110
     assert "compras cerca de 100" in levels["detail"]
+
+
+def test_normalize_intraday_accepts_yahoo_multilevel_columns():
+    index = pd.date_range("2024-01-02 09:30", periods=4, freq="5min")
+    raw = pd.DataFrame(
+        {
+            ("Close", "AAPL"): [10, 11, 12, 13],
+            ("Open", "AAPL"): [10, 11, 12, 13],
+            ("High", "AAPL"): [10.2, 11.2, 12.2, 13.2],
+            ("Low", "AAPL"): [9.8, 10.8, 11.8, 12.8],
+            ("Volume", "AAPL"): [100, 100, 100, 100],
+        },
+        index=index,
+    )
+    raw.columns = pd.MultiIndex.from_tuples(raw.columns)
+    frame = normalize_intraday(raw)
+    assert list(frame["Close"]) == [10, 11, 12, 13]
 
 
 def test_short_session_waits_for_the_opening_range():
