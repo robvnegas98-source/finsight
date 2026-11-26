@@ -54,7 +54,7 @@ def tradingview_symbol(ticker: str, asset_type: str = "") -> str:
     return symbol.replace("-", ".")
 
 
-def tradingview_widget_html(symbol: str, height: int = 560) -> str:
+def tradingview_widget_html(symbol: str, height: int = 560, interval: str = "D") -> str:
     """Widget oficial gratuito. El enlace de atribución lo pide TradingView."""
     safe = (symbol or "NASDAQ:AAPL").replace('"', "").replace("<", "").replace(">", "")
     container = "finsight_tv"
@@ -71,7 +71,7 @@ def tradingview_widget_html(symbol: str, height: int = 560) -> str:
         new TradingView.widget({{
           "autosize": true,
           "symbol": "{safe}",
-          "interval": "D",
+          "interval": "{interval}",
           "timezone": "exchange",
           "theme": "light",
           "style": "1",
