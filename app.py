@@ -3,6 +3,12 @@ import plotly.graph_objects as go
 import pandas as pd
 
 from core.assets import asset_type_label
+from core.explain import (
+    explain_fundamental,
+    explain_recommendation,
+    explain_sentiment,
+    explain_technical,
+)
 from core.graph import build_graph, initial_state
 from core.labels import DISCLAIMER, format_number, price_source_label, scenario_label, signal_label
 from core.prices import history_to_frame
@@ -169,13 +175,28 @@ if st.button("Analizar", type="primary") and ticker:
         st.caption("Notas: " + " · ".join(sent["notes"]))
 
     with st.expander("Detalle técnico completo"):
-        st.json(tech)
+        for paragraph in explain_technical(tech):
+            st.write(paragraph)
     with st.expander("Detalle fundamental"):
-        st.json(fund)
+        for paragraph in explain_fundamental(fund):
+            st.write(paragraph)
     with st.expander("Detalle de sentimiento y macro"):
-        st.json(sent)
+        for paragraph in explain_sentiment(sent):
+            st.write(paragraph)
+        if news:
+            st.write("Algunos titulares que tuve en cuenta:")
+            for item in news[:5]:
+                title = item.get("title") or "Titular"
+                link = item.get("link") or ""
+                publisher = item.get("publisher") or ""
+                suffix = f" ({publisher})" if publisher else ""
+                if link:
+                    st.markdown(f"- [{title}]({link}){suffix}")
+                else:
+                    st.write(f"- {title}{suffix}")
     with st.expander("Recomendación final"):
-        st.json(rec)
+        for paragraph in explain_recommendation(rec, result.get("asset_type")):
+            st.write(paragraph)
 
     if result.get("errors"):
         st.warning("Advertencias:")
