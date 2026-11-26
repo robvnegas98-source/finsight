@@ -1,7 +1,7 @@
 """Textos compartidos por el Chief y la interfaz, para que muestren las mismas cifras."""
 
 DISCLAIMER = (
-    "Aviso: las señales, escenarios y textos de FinSight son informativos "
+    "Aviso: las señales, escenarios y textos de La Bobina Bursátil son informativos "
     "y no constituyen asesoramiento de inversión ni una recomendación de compra o venta."
 )
 

@@ -25,7 +25,7 @@ from core.tables import (
     weights_table,
 )
 
-st.set_page_config(page_title="FinSight Multi-Agent", layout="wide")
+st.set_page_config(page_title="La Bobina Bursátil", layout="wide")
 
 st.markdown(
     """
@@ -68,7 +68,7 @@ st.markdown(
     }
     </style>
     <div class="fs-banner">
-      <h1>FinSight</h1>
+      <h1>LA BOBINA BURSATIL</h1>
       <p>Analizador multi-agente · Acciones, ETFs, criptomonedas y futuros</p>
     </div>
     """,
