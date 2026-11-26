@@ -23,7 +23,8 @@ def test_summary_and_indicators_are_tables():
         },
     }
     summary = summary_table(result, "Kraken vía CCXT (BTC/USD)")
-    assert list(summary["Concepto"])[:2] == ["Señal final", "Confianza"]
+    assert list(summary["Concepto"])[:2] == ["Consejo de entrada", "Señal final"]
+    assert summary.loc[summary["Concepto"] == "Consejo de entrada", "Valor"].item() == "Entrar en venta"
     assert summary.loc[summary["Concepto"] == "Señal final", "Valor"].item() == "Venta"
     indicators = indicators_table(result["technical"])
     assert "Sobreventa" in indicators["Lectura"].tolist()

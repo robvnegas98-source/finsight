@@ -4,13 +4,14 @@ import plotly.graph_objects as go
 import pandas as pd
 
 from core.explain import (
+    entry_advice,
     explain_fundamental,
     explain_recommendation,
     explain_sentiment,
     explain_technical,
 )
 from core.graph import build_graph, initial_state
-from core.labels import DISCLAIMER, price_source_label, scenario_label, signal_label
+from core.labels import DISCLAIMER, price_source_label, scenario_label
 from core.prices import history_to_frame
 from core.tradingview import tradingview_symbol, tradingview_widget_html
 from core.tables import (
@@ -109,17 +110,19 @@ if st.button("Analizar", type="primary") and ticker:
         raw.get("ccxt_exchange") or "",
     )
 
-    signal = (rec.get("signal") or "NEUTRAL").upper()
-    signal_styles = {
-        "BUY": ("#ecfdf5", "#047857", "#a7f3d0"),
-        "SELL": ("#fef2f2", "#b91c1c", "#fecaca"),
-        "NEUTRAL": ("#fffbeb", "#b45309", "#fde68a"),
+    advice = entry_advice(rec)
+    advice_styles = {
+        "compra": ("#ecfdf5", "#047857", "#a7f3d0"),
+        "venta": ("#fef2f2", "#b91c1c", "#fecaca"),
+        "esperar": ("#fffbeb", "#b45309", "#fde68a"),
     }
-    background, ink, border = signal_styles.get(signal, signal_styles["NEUTRAL"])
+    background, ink, border = advice_styles[advice["action"]]
     st.markdown(
         f"""
         <div class="fs-signal" style="background:{background};color:{ink};border-color:{border};">
-          Señal final: {signal_label(rec.get("signal"))} · Confianza {float(rec.get("confidence") or 0):.0%}
+          <div style="font-size:0.95rem;letter-spacing:0.04em;text-transform:uppercase;">Consejo de entrada</div>
+          <div style="font-size:1.35rem;margin-top:4px;">{advice["title"]}</div>
+          <div style="font-weight:500;margin-top:8px;">{advice["detail"]}</div>
         </div>
         """,
         unsafe_allow_html=True,

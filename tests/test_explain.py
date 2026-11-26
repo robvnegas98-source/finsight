@@ -1,4 +1,5 @@
 from core.explain import (
+    entry_advice,
     explain_fundamental,
     explain_recommendation,
     explain_sentiment,
@@ -56,6 +57,27 @@ def test_fundamental_crypto_does_not_dump_fields():
     _assert_prose(text)
     assert "PER" in " ".join(text)
     assert "pe_ratio" not in " ".join(text)
+
+
+def test_entry_advice_says_when_to_buy_sell_or_wait():
+    buy = entry_advice({"signal": "BUY", "confidence": 0.72, "components": {}})
+    assert buy["action"] == "compra"
+    assert "entrada en compra" in buy["title"]
+
+    sell = entry_advice({
+        "signal": "SELL",
+        "confidence": 0.64,
+        "components": {"technical": {"signal": "NEUTRAL"}},
+    })
+    assert sell["action"] == "venta"
+    assert "Neutral" in sell["detail"]
+
+    wait = entry_advice({"signal": "NEUTRAL", "confidence": 0.58, "components": {}})
+    assert wait["action"] == "esperar"
+    assert "No entres" in wait["title"]
+
+    weak_buy = entry_advice({"signal": "BUY", "confidence": 0.42, "components": {}})
+    assert weak_buy["action"] == "esperar"
 
 
 def test_recommendation_explains_a_disagreement():

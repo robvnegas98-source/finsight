@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 import pandas as pd
 
 from core.assets import asset_type_label
+from core.explain import entry_advice
 from core.labels import format_number, scenario_label, signal_label
 
 _FEAR_LABELS = {
@@ -49,6 +50,7 @@ def summary_table(result: Dict[str, Any], source: str) -> pd.DataFrame:
     except (TypeError, ValueError):
         confidence_text = "—"
     return _frame([
+        ["Consejo de entrada", entry_advice(rec)["label"]],
         ["Señal final", signal_label(rec.get("signal"))],
         ["Confianza", confidence_text],
         ["Señal técnica", signal_label(tech.get("signal"))],

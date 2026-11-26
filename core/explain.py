@@ -249,6 +249,70 @@ def explain_sentiment(sent: Optional[Dict[str, Any]]) -> List[str]:
     return _sentences(parts)
 
 
+def entry_advice(rec: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    """Consejo de entrada: compra, venta o esperar. No es una orden."""
+    rec = rec or {}
+    signal = (rec.get("signal") or "NEUTRAL").upper()
+    try:
+        confidence = float(rec.get("confidence") or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    confidence_text = f"{confidence:.0%}"
+    technical_signal = ((rec.get("components") or {}).get("technical") or {}).get("signal")
+    clear = confidence >= 0.55 and signal in {"BUY", "SELL"}
+
+    if clear and signal == "BUY":
+        action = "compra"
+        title = "Sí: puedes buscar una entrada en compra."
+        detail = (
+            f"La lectura conjunta es Compra, con una confianza del {confidence_text}. "
+            "Sirve como idea para las próximas semanas, no para entrar y salir en el minuto."
+        )
+    elif clear and signal == "SELL":
+        action = "venta"
+        title = "Sí: puedes buscar una entrada en venta, o reducir si ya estás comprado."
+        detail = (
+            f"La lectura conjunta es Venta, con una confianza del {confidence_text}. "
+            "Si no operas en corto, la alternativa es no comprar y esperar."
+        )
+    elif signal == "BUY":
+        action = "esperar"
+        title = "Todavía no entres en compra."
+        detail = (
+            f"La balanza se inclina a compra, pero la confianza es solo del {confidence_text}. "
+            "Espera a que el precio y el ánimo del mercado coincidan más."
+        )
+    elif signal == "SELL":
+        action = "esperar"
+        title = "Todavía no entres en venta."
+        detail = (
+            f"La balanza se inclina a venta, pero la confianza es solo del {confidence_text}. "
+            "Forzar la salida ahora tiene poco respaldo."
+        )
+    else:
+        action = "esperar"
+        title = "No entres todavía: ni en compra ni en venta."
+        detail = (
+            f"La señal final es Neutral, con una confianza del {confidence_text}. "
+            "Entrar ahora sería forzar la operación."
+        )
+
+    if technical_signal and technical_signal != signal and action != "esperar":
+        detail += (
+            f" Ojo: la parte técnica por sí sola dice {signal_label(technical_signal)}. "
+            "El consejo sale de juntar precio, fundamentales y sentimiento."
+        )
+    detail += " No es una orden ni un consejo de inversión personal."
+    return {"action": action, "title": title, "detail": detail, "label": _ENTRY_LABELS[action]}
+
+
+_ENTRY_LABELS = {
+    "compra": "Entrar en compra",
+    "venta": "Entrar en venta",
+    "esperar": "No entrar todavía",
+}
+
+
 def _lean(score) -> str:
     if score is None:
         return "no entró en la mezcla"
@@ -274,11 +338,12 @@ def explain_recommendation(rec: Optional[Dict[str, Any]], asset_type: str = "") 
 
     final_name = signal_label(rec.get("signal"))
     technical_name = signal_label(technical.get("signal"))
+    advice = entry_advice(rec)
     parts = [
+        f"{advice['title']} {advice['detail']}",
         (
             f"La señal con la que me quedo es {final_name}, "
-            f"con una confianza del {confidence_text}. "
-            f"Esto no es una orden de compra ni de venta: es la lectura conjunta de las tres partes."
+            f"con una confianza del {confidence_text}."
         ),
         (
             f"Como es {asset_type_label(asset_type).lower()}, "
