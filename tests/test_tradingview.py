@@ -18,3 +18,7 @@ def test_widget_html_contains_the_symbol_and_attribution():
     assert '"><script>' not in html
     assert "TradingView" in html
     assert '"locale": "es"' in html
+    assert "RSI@tv-basicstudies" in html
+    assert "MACD@tv-basicstudies" in html
+    assert "MAExp@tv-basicstudies" in tradingview_widget_html("AAPL", interval="5")
+    assert "MASimple@tv-basicstudies" in tradingview_widget_html("AAPL", interval="D")

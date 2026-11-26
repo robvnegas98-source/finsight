@@ -58,6 +58,11 @@ def tradingview_widget_html(symbol: str, height: int = 560, interval: str = "D")
     """Widget oficial gratuito. El enlace de atribución lo pide TradingView."""
     safe = (symbol or "NASDAQ:AAPL").replace('"', "").replace("<", "").replace(">", "")
     container = "finsight_tv"
+    if interval == "D":
+        studies = ["MASimple@tv-basicstudies", "RSI@tv-basicstudies", "MACD@tv-basicstudies"]
+    else:
+        studies = ["MAExp@tv-basicstudies", "RSI@tv-basicstudies", "MACD@tv-basicstudies"]
+    studies_json = ", ".join(f'"{name}"' for name in studies)
     return f"""
     <div class="tradingview-widget-container" style="height:{height - 32}px;width:100%">
       <div id="{container}" style="height:100%;width:100%"></div>
@@ -82,7 +87,7 @@ def tradingview_widget_html(symbol: str, height: int = 560, interval: str = "D")
           "allow_symbol_change": true,
           "save_image": false,
           "container_id": "{container}",
-          "studies": ["RSI@tv-basicstudies"]
+          "studies": [{studies_json}]
         }});
       </script>
     </div>

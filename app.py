@@ -182,13 +182,16 @@ if st.button("Analizar", type="primary") and ticker:
     st.subheader("Gráfico en vivo (TradingView)")
     if day_plan is not None:
         st.caption(
-            "Velas de 5 minutos, el marco del day trading. "
-            "En el acceso gratuito algunos símbolos van con unos minutos de retraso."
+            "Velas de 5 minutos con los indicadores de TradingView: media exponencial, RSI y MACD. "
+            "Esos dibujos viven en el gráfico. Los precios de entrada y salida los calcula el programa, "
+            "porque TradingView no deja leer esos números sin una licencia de pago. "
+            "En el acceso gratuito algunos símbolos van con retraso."
         )
     else:
         st.caption(
-            "Este gráfico es aparte del de escenarios. TradingView actualiza la cotización "
-            "mientras el mercado está abierto. En el acceso gratuito algunos símbolos van con unos minutos de retraso."
+            "Gráfico diario con los indicadores de TradingView: media simple, RSI y MACD. "
+            "La entrada y la salida de la tabla las calcula el programa. "
+            "En el acceso gratuito algunos símbolos van con retraso."
         )
     components.html(tradingview_widget_html(tv_symbol, height=560, interval=tv_interval), height=570)
 
