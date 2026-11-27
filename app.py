@@ -1,294 +1,256 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import pandas as pd
-
-from core.explain import (
-    entry_advice,
-    explain_fundamental,
-    explain_recommendation,
-    explain_sentiment,
-    explain_technical,
-)
-from core.graph import build_graph, initial_state
-from core.labels import DISCLAIMER, price_source_label, scenario_label
-from core.prices import history_to_frame
-from core.tradingview import tradingview_symbol, tradingview_widget_html
-from core.tables import (
-    fundamental_table,
-    headlines_table,
-    indicators_table,
-    pressure_table,
-    scenarios_table,
-    sentiment_table,
-    summary_table,
-    weights_table,
-)
+from agents.supervisor import run_analysis
 
 st.set_page_config(page_title="FinSight Multi-Agent", layout="wide")
 
-st.markdown(
-    """
-    <style>
-    .stApp {
-      background:
-        radial-gradient(900px 280px at 0% -10%, rgba(15, 118, 110, 0.16), transparent 60%),
-        radial-gradient(700px 240px at 100% 0%, rgba(180, 83, 9, 0.12), transparent 55%),
-        linear-gradient(180deg, #e7eef8 0%, #f7f4ef 240px, #f5f7fb 100%);
-    }
-    h1, h2, h3 { color: #0f2744; letter-spacing: -0.02em; }
-    div[data-testid="stCaption"] { color: #3d4c63; }
-    div[data-testid="stDataFrame"] {
-      border: 1px solid #dbe3ef;
-      border-radius: 12px;
-      overflow: hidden;
-      background: #ffffff;
-    }
-    .fs-banner {
-      background: linear-gradient(120deg, #0f2744 0%, #0f766e 62%, #b45309 140%);
-      color: #f8fafc;
-      border-radius: 16px;
-      padding: 22px 26px 18px;
-      margin-bottom: 12px;
-      box-shadow: 0 10px 30px rgba(15, 39, 68, 0.16);
-    }
-    .fs-banner h1 { color: #ffffff; margin: 0 0 4px; font-size: 2rem; }
-    .fs-banner p { margin: 0; color: #dbe7f5; }
-    .fs-signal {
-      border-radius: 12px;
-      padding: 12px 16px;
-      margin: 8px 0 16px;
-      font-weight: 650;
-      border: 1px solid transparent;
-    }
-    div.stButton > button[kind="primary"] {
-      background: #0f766e;
-      border: none;
-      border-radius: 10px;
-    }
-    </style>
-    <div class="fs-banner">
-      <h1>FinSight</h1>
-      <p>Analizador multi-agente · Acciones, ETFs, criptomonedas y futuros</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-st.caption(DISCLAIMER)
-
-
-def _show_table(frame: pd.DataFrame) -> None:
-    if frame is None or frame.empty:
-        st.caption("Sin datos para esta tabla.")
-        return
-    st.dataframe(frame, hide_index=True, width="stretch")
-
-
-@st.cache_resource
-def get_analysis_graph():
-    return build_graph()
-
+st.title("FinSight — Analizador Multi-Agente")
+st.caption("Acciones · ETFs · Criptomonedas")
 
 ticker = st.text_input(
-    "Ticker (ej: AAPL, SPY, BTC-USD, GLD, GC=F, XAUUSD=X)",
-    value="AAPL",
+    "Ticker (ej: AAPL, SPY, BTC-USD, GLD, GC=F, XAUUSD=X)", 
+    value="GC=F"
 ).upper().strip()
 
 if st.button("Analizar", type="primary") and ticker:
     with st.spinner("Ejecutando los 6 agentes..."):
-        result = get_analysis_graph().invoke(initial_state(ticker))
-
-    rec = result.get("final_recommendation") or {}
-    tech = result.get("technical") or {}
-    fund = result.get("fundamental") or {}
-    sent = result.get("sentiment") or {}
-    raw = result.get("raw_data") or {}
-
-    source = price_source_label(
-        raw.get("price_source"),
-        raw.get("ccxt_symbol") or "",
-        raw.get("ccxt_exchange") or "",
-    )
-
-    advice = entry_advice(rec)
-    advice_styles = {
-        "compra": ("#ecfdf5", "#047857", "#a7f3d0"),
-        "venta": ("#fef2f2", "#b91c1c", "#fecaca"),
-        "esperar": ("#fffbeb", "#b45309", "#fde68a"),
-    }
-    background, ink, border = advice_styles[advice["action"]]
-    st.markdown(
-        f"""
-        <div class="fs-signal" style="background:{background};color:{ink};border-color:{border};">
-          <div style="font-size:0.95rem;letter-spacing:0.04em;text-transform:uppercase;">Consejo de entrada</div>
-          <div style="font-size:1.35rem;margin-top:4px;">{advice["title"]}</div>
-          <div style="font-weight:500;margin-top:8px;">{advice["detail"]}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # --- Panel de probabilidad de éxito del trade ---
-    scenarios = tech.get("scenarios") or {}
-    probs = scenarios.get("probabilities") or {}
-    signal = rec.get("signal", tech.get("signal", "NEUTRAL"))
-    confidence = rec.get("confidence", tech.get("confidence", 0.5))
-
+        result = run_analysis(ticker)
+    
+    rec = result.get("final_recommendation", {})
+    tech = result.get("technical", {})
+    bp = tech.get("buying_pressure", {})
+    scenarios = tech.get("scenarios", {})
+    probs = scenarios.get("probabilities", {})
+    
     buy_prob = probs.get("optimistic", 0)
     sell_prob = probs.get("pessimistic", 0)
+    signal = rec.get("signal", tech.get("signal", "NEUTRAL"))
+    confidence = rec.get("confidence", tech.get("confidence", 0.5))
+    
     buy_prob = min(95, int(buy_prob * (0.7 + confidence * 0.6)))
     sell_prob = min(95, int(sell_prob * (0.7 + confidence * 0.6)))
-
+    
     st.subheader("Probabilidad de éxito del trade")
+    
     col_buy, col_sell = st.columns(2)
-
+    
     with col_buy:
-        buy_color = "#ecfdf5" if signal == "BUY" else "#f8fafc"
-        buy_border = "#047857" if signal == "BUY" else "#cbd5e1"
+        buy_color = "#d4edda" if signal == "BUY" else "#f8f9fa"
+        buy_border = "#28a745" if signal == "BUY" else "#6c757d"
         st.markdown(
             f"""
-            <div style="background-color:{buy_color}; border:2px solid {buy_border}; padding:16px; border-radius:12px; text-align:center;">
-                <div style="font-size:1.05em; font-weight:650; color:#047857;">COMPRAR</div>
-                <div style="font-size:2.4em; font-weight:700; color:#059669; margin:8px 0;">{buy_prob}%</div>
-                <div style="font-size:0.9em; color:#334155;">Prob. de éxito (escenario alcista)</div>
-                <div style="margin-top:6px; font-size:0.85em; color:#64748b;">
+            <div style="background-color:{buy_color}; border:2px solid {buy_border}; padding:16px; border-radius:10px; text-align:center;">
+                <div style="font-size:1.1em; font-weight:600; color:#1e7e34;">COMPRAR</div>
+                <div style="font-size:2.4em; font-weight:700; color:#28a745; margin:8px 0;">{buy_prob}%</div>
+                <div style="font-size:0.9em; color:#333;">Prob. de éxito (escenario alcista)</div>
+                <div style="margin-top:6px; font-size:0.85em; color:#555;">
                     Señal: <b>{signal}</b> · Confianza: {confidence:.0%}
                 </div>
             </div>
             """,
             unsafe_allow_html=True
         )
-
+    
     with col_sell:
-        sell_color = "#fef2f2" if signal == "SELL" else "#f8fafc"
-        sell_border = "#b91c1c" if signal == "SELL" else "#cbd5e1"
+        sell_color = "#f8d7da" if signal == "SELL" else "#f8f9fa"
+        sell_border = "#dc3545" if signal == "SELL" else "#6c757d"
         st.markdown(
             f"""
-            <div style="background-color:{sell_color}; border:2px solid {sell_border}; padding:16px; border-radius:12px; text-align:center;">
-                <div style="font-size:1.05em; font-weight:650; color:#b91c1c;">VENDER</div>
-                <div style="font-size:2.4em; font-weight:700; color:#dc2626; margin:8px 0;">{sell_prob}%</div>
-                <div style="font-size:0.9em; color:#334155;">Prob. de éxito (escenario bajista)</div>
-                <div style="margin-top:6px; font-size:0.85em; color:#64748b;">
+            <div style="background-color:{sell_color}; border:2px solid {sell_border}; padding:16px; border-radius:10px; text-align:center;">
+                <div style="font-size:1.1em; font-weight:600; color:#721c24;">VENDER</div>
+                <div style="font-size:2.4em; font-weight:700; color:#dc3545; margin:8px 0;">{sell_prob}%</div>
+                <div style="font-size:0.9em; color:#333;">Prob. de éxito (escenario bajista)</div>
+                <div style="margin-top:6px; font-size:0.85em; color:#555;">
                     Señal: <b>{signal}</b> · Confianza: {confidence:.0%}
                 </div>
             </div>
             """,
             unsafe_allow_html=True
         )
-
+    
     st.caption("Las probabilidades se basan en los escenarios técnicos (optimista/pesimista) ajustados por la confianza de la señal. No constituyen recomendación de inversión.")
-
-    st.subheader("Resumen")
-    _show_table(summary_table(result, source))
-
-    left, right = st.columns(2)
-    with left:
-        st.subheader("Indicadores")
-        _show_table(indicators_table(tech))
-    with right:
-        st.subheader("Escenarios")
-        _show_table(scenarios_table(tech))
-        st.subheader("Presión compradora")
-        _show_table(pressure_table(tech))
-
-    st.subheader("Gráfico de precio y escenarios")
-    frame = history_to_frame(raw.get("history"))
-    if frame is None:
-        frame = history_to_frame((raw.get("sources") or {}).get("yfinance", {}).get("history"))
-    scenarios = tech.get("scenarios") or {}
-    probs = scenarios.get("probabilities") or {}
-
-    if frame is not None and "Close" in frame.columns and scenarios and probs:
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=frame.index, y=frame["Close"],
-            mode="lines", name="Precio histórico",
-            line=dict(color="#1f77b4", width=2),
-        ))
-
-        future_dates = pd.to_datetime(scenarios["dates"])
-        for key, color in (("optimistic", "green"), ("base", "orange"), ("pessimistic", "red")):
+    
+    st.divider()
+    
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Señal Final", rec.get("signal", "N/A"))
+    col2.metric("Confianza", f"{rec.get('confidence', 0):.0%}")
+    col3.metric("Señal Técnica", tech.get("signal", "N/A"))
+    col4.metric("Proyección", tech.get("projection", "—"))
+    
+    st.subheader("Justificación")
+    st.write(rec.get("reasoning", "Sin datos suficientes"))
+    
+    if bp:
+        st.subheader("Presión Compradora")
+        level = bp.get("level", "—")
+        desc = bp.get("description", "")
+        ratio = bp.get("volume_ratio", 1)
+        
+        if "mucho" in level.lower():
+            color = "#d4edda"
+            border = "#28a745"
+        elif "regular" in level.lower() or "manteniéndose" in level.lower():
+            color = "#fff3cd"
+            border = "#ffc107"
+        elif "baja" in level.lower() or "muy baja" in level.lower():
+            color = "#f8d7da"
+            border = "#dc3545"
+        else:
+            color = "#e2e3e5"
+            border = "#6c757d"
+        
+        st.markdown(
+            f"""
+            <div style="background-color:{color}; border-left:5px solid {border}; padding:12px 16px; border-radius:6px; margin-bottom:16px;">
+                <strong style="font-size:1.1em;">{level}</strong><br>
+                <span style="color:#333;">{desc}</span><br>
+                <small>Ratio volumen vs promedio 20d: <b>{ratio}x</b></small>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    
+    vp = tech.get("volume_profile", {})
+    if vp:
+        st.subheader("Volume Profile")
+        col_vp1, col_vp2, col_vp3 = st.columns(3)
+        col_vp1.metric("POC (Point of Control)", vp.get("poc", "—"))
+        col_vp2.metric("Value Area Low", vp.get("value_area_low", "—"))
+        col_vp3.metric("Value Area High", vp.get("value_area_high", "—"))
+        st.caption(f"Posición actual: **{vp.get('current_position', '—')}**. El POC es el nivel de precio donde más volumen se negoció.")
+    
+    ad = tech.get("approx_delta", {})
+    if ad.get("available"):
+        st.subheader("Delta aproximado (tick rule)")
+        bias = ad.get("bias", "—")
+        d_color = "#d4edda" if "comprador" in bias else "#f8d7da" if "vendedor" in bias else "#fff3cd"
+        d_border = "#28a745" if "comprador" in bias else "#dc3545" if "vendedor" in bias else "#ffc107"
+        st.markdown(
+            f"""
+            <div style="background-color:{d_color}; border-left:5px solid {d_border}; padding:12px 16px; border-radius:6px; margin-bottom:16px;">
+                <strong>{bias}</strong><br>
+                Delta reciente: <b>{ad.get('recent_delta', 0):,.0f}</b> · {ad.get('delta_pct', 0)}% del volumen
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        st.caption(ad.get("note", ""))
+    
+    gex = tech.get("net_gex", {})
+    if gex.get("available"):
+        st.subheader("Net Gamma Exposure (GEX)")
+        regime = gex.get("regime", "—")
+        gex_color = "#d4edda" if "positiva" in regime else "#f8d7da" if "negativa" in regime else "#fff3cd"
+        gex_border = "#28a745" if "positiva" in regime else "#dc3545" if "negativa" in regime else "#ffc107"
+        st.markdown(
+            f"""
+            <div style="background-color:{gex_color}; border-left:5px solid {gex_border}; padding:12px 16px; border-radius:6px; margin-bottom:16px;">
+                <strong>{regime}</strong><br>
+                Net GEX: <b>{gex.get('net_gex', 0):,.0f}</b> (aprox. por 1% de movimiento)<br>
+                Call Wall: {gex.get('call_wall', '—')} · Put Wall: {gex.get('put_wall', '—')}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        st.caption(gex.get("note", ""))
+    elif gex:
+        st.caption(f"Net GEX: {gex.get('note', 'No disponible')}")
+    
+    st.subheader("Gráfico de Precio + Escenarios con Probabilidades")
+    yf_hist = result.get("raw_data", {}).get("sources", {}).get("yfinance", {}).get("history")
+    
+    if yf_hist and scenarios and probs:
+        df = pd.DataFrame(yf_hist)
+        if "Close" in df.columns:
+            df["Close"] = df["Close"].astype(float)
+            if not isinstance(df.index, pd.DatetimeIndex):
+                df.index = pd.to_datetime(df.index)
+            
+            fig = go.Figure()
             fig.add_trace(go.Scatter(
-                x=future_dates,
-                y=scenarios[key],
-                mode="lines",
-                name=f"{scenario_label(key)} ({probs.get(key, 0)}%)",
-                line=dict(color=color, dash="dash", width=2),
+                x=df.index, y=df["Close"],
+                mode="lines", name="Precio histórico",
+                line=dict(color="#1f77b4", width=2)
             ))
-
-        best = scenarios.get("best_scenario", "base")
-        best_prob = probs.get(best, 0)
-        best_name = scenario_label(best)
-
-        sr = tech.get("support_resistance") or {}
-        if sr.get("support"):
-            fig.add_hline(y=sr["support"], line_dash="dot", line_color="green")
-        if sr.get("resistance"):
-            fig.add_hline(y=sr["resistance"], line_dash="dot", line_color="red")
-
-        fig.update_layout(
-            height=520,
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="#ffffff",
-            font=dict(color="#1e293b"),
-            margin=dict(l=0, r=0, t=40, b=0),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02),
-        )
-        fig.update_xaxes(gridcolor="#e2e8f0")
-        fig.update_yaxes(gridcolor="#e2e8f0")
-        st.plotly_chart(fig, width="stretch")
-        st.caption(
-            f"Línea verde: soporte. Línea roja: resistencia. "
-            f"El camino más probable es {best_name} ({best_prob} %). Fuente: {source}."
-        )
+            
+            future_dates = pd.to_datetime(scenarios["dates"])
+            fig.add_trace(go.Scatter(
+                x=future_dates, y=scenarios["optimistic"],
+                mode="lines", name=f"Optimista ({probs.get('optimistic', 0)}%)",
+                line=dict(color="green", dash="dash", width=2)
+            ))
+            fig.add_trace(go.Scatter(
+                x=future_dates, y=scenarios["base"],
+                mode="lines", name=f"Base ({probs.get('base', 0)}%)",
+                line=dict(color="orange", dash="dash", width=2)
+            ))
+            fig.add_trace(go.Scatter(
+                x=future_dates, y=scenarios["pessimistic"],
+                mode="lines", name=f"Pesimista ({probs.get('pessimistic', 0)}%)",
+                line=dict(color="red", dash="dash", width=2)
+            ))
+            
+            best = scenarios.get("best_scenario", "base")
+            best_prob = probs.get(best, 0)
+            best_name = {"optimistic": "Optimista", "base": "Base", "pessimistic": "Pesimista"}.get(best, best)
+            
+            fig.add_annotation(
+                x=future_dates[len(future_dates)//2],
+                y=max(scenarios[best]) if scenarios.get(best) else df["Close"].iloc[-1],
+                text=f"Más probable: {best_name} ({best_prob}%)",
+                showarrow=True, arrowhead=2,
+                font=dict(size=13, color="black"),
+                bgcolor="rgba(255,255,255,0.85)",
+                bordercolor="gray"
+            )
+            
+            sr = tech.get("support_resistance", {})
+            if sr.get("support"):
+                fig.add_hline(y=sr["support"], line_dash="dot", line_color="green", annotation_text="Soporte")
+            if sr.get("resistance"):
+                fig.add_hline(y=sr["resistance"], line_dash="dot", line_color="red", annotation_text="Resistencia")
+            
+            vp = tech.get("volume_profile", {})
+            if vp.get("poc"):
+                fig.add_hline(y=vp["poc"], line_dash="dash", line_color="purple", annotation_text="POC")
+            if vp.get("value_area_low"):
+                fig.add_hline(y=vp["value_area_low"], line_dash="dot", line_color="purple", annotation_text="VA Low", opacity=0.6)
+            if vp.get("value_area_high"):
+                fig.add_hline(y=vp["value_area_high"], line_dash="dot", line_color="purple", annotation_text="VA High", opacity=0.6)
+            
+            fig.update_layout(height=520, margin=dict(l=0, r=0, t=40, b=0), legend=dict(orientation="h", yanchor="bottom", y=1.02))
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption(f"Escenario más probable: **{best_name}** ({best_prob}%).")
     else:
         st.info("No se obtuvieron datos suficientes para graficar escenarios.")
-
-    tv_symbol = tradingview_symbol(result.get("ticker") or ticker, result.get("asset_type") or "")
-    st.subheader("Gráfico en vivo (TradingView)")
-    st.caption(
-        "Este gráfico es aparte del de escenarios. TradingView actualiza la cotización "
-        "mientras el mercado está abierto. En el acceso gratuito algunos símbolos van con unos minutos de retraso."
-    )
-    components.html(tradingview_widget_html(tv_symbol, height=560), height=570)
-
-    fund_col, sent_col = st.columns(2)
-    with fund_col:
-        st.subheader("Fundamental")
-        _show_table(fundamental_table(fund))
-    with sent_col:
-        st.subheader("Sentimiento y macro")
-        _show_table(sentiment_table(sent))
-
-    news = headlines_table(sent)
-    if not news.empty:
-        st.subheader("Titulares")
-        st.dataframe(
-            news,
-            hide_index=True,
-            width="stretch",
-            column_config={"Enlace": st.column_config.LinkColumn("Enlace", display_text="Abrir")},
-        )
-
-    st.subheader("Cómo se armó la señal")
-    _show_table(weights_table(rec))
-
-    with st.expander("Detalle técnico completo"):
-        for paragraph in explain_technical(tech):
-            st.write(paragraph)
-    with st.expander("Detalle fundamental"):
-        for paragraph in explain_fundamental(fund):
-            st.write(paragraph)
-    with st.expander("Detalle de sentimiento y macro"):
-        for paragraph in explain_sentiment(sent):
-            st.write(paragraph)
+    
+    st.subheader("Indicadores Técnicos")
+    ind = tech.get("indicators", {})
+    if ind:
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("RSI (14)", ind.get("rsi_14", "—"))
+        c2.metric("MACD", ind.get("macd", "—"))
+        c3.metric("SMA 50", ind.get("sma_50", "—"))
+        c4.metric("SMA 200", ind.get("sma_200", "—"))
+    
+    if tech.get("notes"):
+        st.caption("Notas: " + " · ".join(tech["notes"]))
+    
+    with st.expander("Detalle Técnico completo"):
+        st.json(tech)
+    with st.expander("Detalle Fundamental"):
+        st.json(result.get("fundamental", {}))
+    with st.expander("Detalle Sentimiento & Macro"):
+        st.json(result.get("sentiment", {}))
     with st.expander("Recomendación final"):
-        for paragraph in explain_recommendation(rec, result.get("asset_type")):
-            st.write(paragraph)
-
+        st.json(rec)
+    
     if result.get("errors"):
         st.warning("Advertencias:")
         for err in result["errors"]:
             st.write(f"- {err}")
+
 else:
-    st.info("Introduce un ticker y pulsa Analizar. Prueba con **AAPL**, **BTC-USD**, **GLD** o **GC=F**.")
+    st.info("Introduce un ticker y pulsa Analizar. Prueba con **GC=F** o **GLD** para oro.")
