@@ -25,6 +25,15 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+### FinSight Sports (parlays MLB/NFL)
+
+App Streamlit **separada** (no mezcla la lógica financiera). Detalles en [`sports/README.md`](sports/README.md):
+
+```bash
+pip install -r sports/requirements.txt
+streamlit run sports/app.py
+```
+
 Copia el ejemplo de variables si quieres activar el resumen opcional:
 
 ```bash
