@@ -128,6 +128,56 @@ if st.button("Analizar", type="primary") and ticker:
         unsafe_allow_html=True,
     )
 
+    # --- Panel de probabilidad de éxito del trade ---
+    scenarios = tech.get("scenarios") or {}
+    probs = scenarios.get("probabilities") or {}
+    signal = rec.get("signal", tech.get("signal", "NEUTRAL"))
+    confidence = rec.get("confidence", tech.get("confidence", 0.5))
+
+    buy_prob = probs.get("optimistic", 0)
+    sell_prob = probs.get("pessimistic", 0)
+    buy_prob = min(95, int(buy_prob * (0.7 + confidence * 0.6)))
+    sell_prob = min(95, int(sell_prob * (0.7 + confidence * 0.6)))
+
+    st.subheader("Probabilidad de éxito del trade")
+    col_buy, col_sell = st.columns(2)
+
+    with col_buy:
+        buy_color = "#ecfdf5" if signal == "BUY" else "#f8fafc"
+        buy_border = "#047857" if signal == "BUY" else "#cbd5e1"
+        st.markdown(
+            f"""
+            <div style="background-color:{buy_color}; border:2px solid {buy_border}; padding:16px; border-radius:12px; text-align:center;">
+                <div style="font-size:1.05em; font-weight:650; color:#047857;">COMPRAR</div>
+                <div style="font-size:2.4em; font-weight:700; color:#059669; margin:8px 0;">{buy_prob}%</div>
+                <div style="font-size:0.9em; color:#334155;">Prob. de éxito (escenario alcista)</div>
+                <div style="margin-top:6px; font-size:0.85em; color:#64748b;">
+                    Señal: <b>{signal}</b> · Confianza: {confidence:.0%}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    with col_sell:
+        sell_color = "#fef2f2" if signal == "SELL" else "#f8fafc"
+        sell_border = "#b91c1c" if signal == "SELL" else "#cbd5e1"
+        st.markdown(
+            f"""
+            <div style="background-color:{sell_color}; border:2px solid {sell_border}; padding:16px; border-radius:12px; text-align:center;">
+                <div style="font-size:1.05em; font-weight:650; color:#b91c1c;">VENDER</div>
+                <div style="font-size:2.4em; font-weight:700; color:#dc2626; margin:8px 0;">{sell_prob}%</div>
+                <div style="font-size:0.9em; color:#334155;">Prob. de éxito (escenario bajista)</div>
+                <div style="margin-top:6px; font-size:0.85em; color:#64748b;">
+                    Señal: <b>{signal}</b> · Confianza: {confidence:.0%}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    st.caption("Las probabilidades se basan en los escenarios técnicos (optimista/pesimista) ajustados por la confianza de la señal. No constituyen recomendación de inversión.")
+
     st.subheader("Resumen")
     _show_table(summary_table(result, source))
 
