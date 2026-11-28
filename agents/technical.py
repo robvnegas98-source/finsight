@@ -420,7 +420,9 @@ def approximate_net_gex(ticker: str, asset_type: str, current_price: Optional[fl
     except Exception as exc:
         return {"available": False, "note": f"No se pudo calcular GEX: {exc}"}
 
-\ndef analyze_technical(raw_data: Dict[str, Any]) -> Dict[str, Any]:
+
+
+def analyze_technical(raw_data: Dict[str, Any]) -> Dict[str, Any]:
     result = {
         "signal": "NEUTRAL",
         "confidence": 0.5,
@@ -454,7 +456,8 @@ def approximate_net_gex(ticker: str, asset_type: str, current_price: Optional[fl
         asset_type = (raw_data or {}).get("asset_type") or ""
         last_close = _last_number(close)
         result["net_gex"] = approximate_net_gex(ticker, asset_type, last_close)
-\n        sma_20 = close.rolling(20).mean()
+
+        sma_20 = close.rolling(20).mean()
         sma_50 = close.rolling(50).mean()
         sma_200 = close.rolling(200).mean()
         rsi = calculate_rsi(close, 14)
