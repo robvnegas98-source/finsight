@@ -261,6 +261,42 @@ if st.button("Analizar", type="primary") and ticker:
             st.subheader("Presión compradora")
             _show_table(pressure_table(tech))
 
+
+        # Volume Profile, Delta y Net GEX
+        vp = tech.get("volume_profile") or {}
+        delta_info = tech.get("delta") or {}
+        gex_info = tech.get("net_gex") or {}
+
+        if vp or delta_info.get("available") or gex_info:
+            st.subheader("Indicadores de precisión")
+            cols = st.columns(3)
+            with cols[0]:
+                if vp:
+                    st.metric("POC", vp.get("poc", "—"))
+                    st.metric("VA Low", vp.get("value_area_low", "—"))
+                    st.metric("VA High", vp.get("value_area_high", "—"))
+                    st.caption(vp.get("current_position", ""))
+            with cols[1]:
+                if delta_info.get("available"):
+                    st.metric("Delta reciente", f"{delta_info.get('recent_delta', 0):,.0f}")
+                    st.metric("Sesgo", delta_info.get("bias", "—"))
+                    st.caption(f"{delta_info.get('delta_pct', 0)}% del volumen reciente")
+                    st.caption(delta_info.get("note", ""))
+            with cols[2]:
+                if gex_info.get("available"):
+                    st.metric("Net GEX (aprox)", f"{gex_info.get('net_gex', 0):,.0f}")
+                    st.caption(gex_info.get("regime", ""))
+                    walls = []
+                    if gex_info.get("call_wall"):
+                        walls.append(f"Call Wall: {gex_info['call_wall']}")
+                    if gex_info.get("put_wall"):
+                        walls.append(f"Put Wall: {gex_info['put_wall']}")
+                    if walls:
+                        st.caption(" · ".join(walls))
+                    st.caption(gex_info.get("note", ""))
+                elif gex_info.get("note"):
+                    st.caption(f"Net GEX: {gex_info['note']}")
+
         st.subheader("Gráfico de precio y escenarios")
         frame = history_to_frame(raw.get("history"))
         if frame is None:
@@ -295,6 +331,15 @@ if st.button("Analizar", type="primary") and ticker:
                 fig.add_hline(y=sr["support"], line_dash="dot", line_color="green")
             if sr.get("resistance"):
                 fig.add_hline(y=sr["resistance"], line_dash="dot", line_color="red")
+
+            vp = tech.get("volume_profile") or {}
+            if vp.get("poc"):
+                fig.add_hline(y=vp["poc"], line_dash="dash", line_color="purple", annotation_text="POC")
+            if vp.get("value_area_low"):
+                fig.add_hline(y=vp["value_area_low"], line_dash="dot", line_color="gray")
+            if vp.get("value_area_high"):
+                fig.add_hline(y=vp["value_area_high"], line_dash="dot", line_color="gray")
+
             if swing_levels and swing_levels.get("entry") is not None:
                 add_entry_exit_lines(fig, swing_levels)
 

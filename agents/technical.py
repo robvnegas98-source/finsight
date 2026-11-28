@@ -265,7 +265,162 @@ def _trend_label(price, sma50, sma200) -> str:
     return "Lateral"
 
 
-def analyze_technical(raw_data: Dict[str, Any]) -> Dict[str, Any]:
+
+
+def calculate_volume_profile(df: pd.DataFrame, bins: int = 80) -> Dict[str, Any]:
+    """Volume Profile: POC, Value Area 70% y posición del precio actual."""
+    if "Close" not in df.columns or "Volume" not in df.columns or len(df) < 20:
+        return {}
+    prices = df["Close"].astype(float).values
+    volumes = df["Volume"].astype(float).values
+    if len(prices) == 0 or np.nansum(volumes) <= 0:
+        return {}
+
+    min_p, max_p = float(np.nanmin(prices)), float(np.nanmax(prices))
+    if min_p >= max_p:
+        return {}
+
+    hist, edges = np.histogram(prices, bins=bins, weights=volumes, range=(min_p, max_p))
+    if hist.sum() <= 0:
+        return {}
+
+    poc_idx = int(np.argmax(hist))
+    poc = (edges[poc_idx] + edges[poc_idx + 1]) / 2.0
+
+    total_vol = float(hist.sum())
+    target = total_vol * 0.70
+    sorted_idx = np.argsort(hist)[::-1]
+    va_vol = 0.0
+    va_indices = set()
+    for i in sorted_idx:
+        va_indices.add(int(i))
+        va_vol += hist[i]
+        if va_vol >= target:
+            break
+    if not va_indices:
+        return {}
+    va_low = float(edges[min(va_indices)])
+    va_high = float(edges[max(va_indices) + 1])
+
+    current = float(prices[-1])
+    if current > va_high:
+        position = "Por encima del Value Area"
+    elif current < va_low:
+        position = "Por debajo del Value Area"
+    elif abs(current - poc) / poc < 0.005:
+        position = "Cerca del POC"
+    else:
+        position = "Dentro del Value Area"
+
+    return {
+        "poc": round(poc, 2),
+        "value_area_low": round(va_low, 2),
+        "value_area_high": round(va_high, 2),
+        "current_position": position,
+        "bins": bins,
+    }
+
+
+def approximate_delta(df: pd.DataFrame, recent_bars: int = 20) -> Dict[str, Any]:
+    """Delta aproximado por tick rule (sube = compra, baja = venta)."""
+    if "Close" not in df.columns or "Volume" not in df.columns or len(df) < 5:
+        return {"available": False}
+    close = df["Close"].astype(float)
+    volume = df["Volume"].astype(float)
+    change = close.diff()
+
+    buy_all = float(volume.where(change > 0, 0).sum())
+    sell_all = float(volume.where(change < 0, 0).sum())
+    delta_all = buy_all - sell_all
+    total_all = buy_all + sell_all
+
+    recent = df.tail(recent_bars)
+    r_change = recent["Close"].astype(float).diff()
+    r_vol = recent["Volume"].astype(float)
+    buy_r = float(r_vol.where(r_change > 0, 0).sum())
+    sell_r = float(r_vol.where(r_change < 0, 0).sum())
+    delta_r = buy_r - sell_r
+    total_r = buy_r + sell_r
+
+    ratio = delta_r / total_r if total_r > 0 else 0.0
+    if ratio > 0.15:
+        bias = "Sesgo comprador"
+    elif ratio < -0.15:
+        bias = "Sesgo vendedor"
+    else:
+        bias = "Equilibrado"
+
+    return {
+        "available": True,
+        "delta": round(delta_all, 0),
+        "recent_delta": round(delta_r, 0),
+        "buy_volume": round(buy_all, 0),
+        "sell_volume": round(sell_all, 0),
+        "delta_ratio": round(ratio, 3),
+        "delta_pct": round(ratio * 100, 1),
+        "bias": bias,
+        "note": "Aproximación por tick rule sobre velas diarias/históricas. No es delta de cinta real.",
+    }
+
+
+def approximate_net_gex(ticker: str, asset_type: str, current_price: Optional[float]) -> Dict[str, Any]:
+    """Net GEX aproximado solo para ETFs (usando OI de la primera expiración)."""
+    at = (asset_type or "").lower()
+    if not ticker or at not in ("etf", "etfs"):
+        return {"available": False, "note": "Net GEX solo se calcula para ETFs (trades de mediano/largo plazo)"}
+    if current_price is None or current_price <= 0:
+        return {"available": False, "note": "Sin precio actual para estimar GEX"}
+
+    try:
+        import yfinance as yf
+        t = yf.Ticker(ticker)
+        expirations = getattr(t, "options", None)
+        if not expirations:
+            return {"available": False, "note": "No hay cadena de opciones disponible para este ETF"}
+        exp = expirations[0]
+        chain = t.option_chain(exp)
+        calls = chain.calls
+        puts = chain.puts
+        if calls.empty and puts.empty:
+            return {"available": False, "note": "Cadena de opciones vacía"}
+
+        # Gamma proxy simple (0.01) * OI * 100 * precio. Calls positivos, puts negativos.
+        gex = 0.0
+        call_wall = None
+        put_wall = None
+        if not calls.empty and "strike" in calls.columns and "openInterest" in calls.columns:
+            max_call = calls.loc[calls["openInterest"].idxmax()]
+            call_wall = round(float(max_call["strike"]), 2)
+            for _, row in calls.iterrows():
+                oi = float(row.get("openInterest") or 0)
+                gex += oi * 0.01 * 100 * current_price
+        if not puts.empty and "strike" in puts.columns and "openInterest" in puts.columns:
+            max_put = puts.loc[puts["openInterest"].idxmax()]
+            put_wall = round(float(max_put["strike"]), 2)
+            for _, row in puts.iterrows():
+                oi = float(row.get("openInterest") or 0)
+                gex -= oi * 0.01 * 100 * current_price
+
+        if gex > 0:
+            regime = "GEX positiva (mayor estabilidad / mean-reversion)"
+        elif gex < 0:
+            regime = "GEX negativa (mayor volatilidad / tendencia)"
+        else:
+            regime = "GEX neutra"
+
+        return {
+            "available": True,
+            "net_gex": round(float(gex), 0),
+            "regime": regime,
+            "call_wall": call_wall,
+            "put_wall": put_wall,
+            "expiration": exp,
+            "note": "Aproximación con open interest de la primera expiración. No es GEX institucional real.",
+        }
+    except Exception as exc:
+        return {"available": False, "note": f"No se pudo calcular GEX: {exc}"}
+
+\ndef analyze_technical(raw_data: Dict[str, Any]) -> Dict[str, Any]:
     result = {
         "signal": "NEUTRAL",
         "confidence": 0.5,
@@ -274,6 +429,9 @@ def analyze_technical(raw_data: Dict[str, Any]) -> Dict[str, Any]:
         "projection": "Lateral",
         "scenarios": {},
         "buying_pressure": {},
+        "volume_profile": {},
+        "delta": {},
+        "net_gex": {},
         "notes": [],
     }
 
@@ -289,8 +447,14 @@ def analyze_technical(raw_data: Dict[str, Any]) -> Dict[str, Any]:
 
         close = frame["Close"].astype(float)
         result["buying_pressure"] = analyze_buying_pressure(frame)
+        result["volume_profile"] = calculate_volume_profile(frame)
+        result["delta"] = approximate_delta(frame)
 
-        sma_20 = close.rolling(20).mean()
+        ticker = (raw_data or {}).get("ticker") or ""
+        asset_type = (raw_data or {}).get("asset_type") or ""
+        last_close = _last_number(close)
+        result["net_gex"] = approximate_net_gex(ticker, asset_type, last_close)
+\n        sma_20 = close.rolling(20).mean()
         sma_50 = close.rolling(50).mean()
         sma_200 = close.rolling(200).mean()
         rsi = calculate_rsi(close, 14)
