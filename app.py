@@ -401,3 +401,13 @@ if st.button("Analizar", type="primary") and ticker:
             st.write(f"- {err}")
 else:
     st.info("Introduce un ticker y pulsa Analizar. Prueba con **AAPL**, **BTC-USD**, **GLD** o **GC=F**.")
+
+# Firma
+st.markdown(
+    """
+    <div style="text-align: right; margin-top: 40px; padding-top: 10px; border-top: 1px solid #e2e8f0;">
+        <span style="font-size: 0.75em; color: #94a3b8; letter-spacing: 0.05em;">elbobbie_98</span>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
